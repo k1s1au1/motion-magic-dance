@@ -30,6 +30,9 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
   const currentSpeed = useRef(INITIAL_SPEED);
   const flash = useRef<{ text: string; t: number; color: string } | null>(null);
   const graffiti = useRef<{lane: number, z: number, text: string, color: string}[]>([]);
+  const smoothedLaneX = useRef(1);
+  const trail = useRef<{x: number, y: number, a: number}[]>([]);
+  const feverFactor = useRef(0);
 
   // Calibration
   const baselineY = useRef(0.5);
@@ -84,11 +87,16 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
       currentSpeed.current = Math.min(MAX_SPEED, INITIAL_SPEED + (distance / 5000));
       const speed = currentSpeed.current;
 
+      // Fever Mode logic
+      const isFever = (Math.floor(distance / 1000) % 2 === 1);
+      feverFactor.current = feverFactor.current * 0.95 + (isFever ? 1 : 0) * 0.05;
+
       setDistance(d => d + speed * 10);
       obstacles.current.forEach(o => o.z -= speed);
       coins.current.forEach(c => c.z -= speed);
 
-      // Update Graffiti
+      // Update Smoothing
+      smoothedLaneX.current = smoothedLaneX.current * 0.85 + playerLane.current * 0.15;
       if (Math.random() < 0.01) {
         const texts = ["DANCE", "SWIFT", "METRO", "JET", "WOW", "LOVABLE"];
         const colors = ["#ff00ff", "#00ffff", "#ffff00", "#ff0000"];
@@ -178,7 +186,8 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
     }
 
     // DRAW BACKGROUND
-    ctx.fillStyle = "#050510";
+    const bgHue = 240 + feverFactor.current * 60;
+    ctx.fillStyle = `hsl(${bgHue}, 50%, 5%)`;
     ctx.fillRect(0, 0, w, h);
 
     // Tunnel Geometry (Floor & Walls)
@@ -194,13 +203,28 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
       const yNear = getY(zNear), yFar = getY(zFar);
 
       // Floor pattern (Concrete slabs)
-      ctx.fillStyle = i % 2 === 0 ? "#151525" : "#1a1a30";
+      const floorHue = 240 + feverFactor.current * 100;
+      ctx.fillStyle = i % 2 === 0 ? `hsl(${floorHue}, 30%, 10%)` : `hsl(${floorHue}, 30%, 15%)`;
       ctx.beginPath();
       ctx.moveTo(x0Far, yFar); ctx.lineTo(x1Far, yFar); ctx.lineTo(x1Near, yNear); ctx.lineTo(x0Near, yNear);
       ctx.fill();
 
+      // Reflections on floor
+      if (i === 1) { // Near floor reflection area
+        ctx.save();
+        ctx.globalAlpha = 0.15;
+        // Reflection of player (simple silhouette)
+        const rx = getX(smoothedLaneX.current, 1);
+        const ry = h * 0.88;
+        ctx.translate(rx, ry + h * 0.05);
+        ctx.scale(1, -0.4);
+        // We'll draw the reflection later near the player draw
+        ctx.restore();
+      }
+
       // Walls
-      ctx.fillStyle = i % 2 === 0 ? "#0a0a1a" : "#101025";
+      const wallHue = 240 + feverFactor.current * 120;
+      ctx.fillStyle = i % 2 === 0 ? `hsl(${wallHue}, 40%, 5%)` : `hsl(${wallHue}, 40%, 10%)`;
       const whNear = tunnelH * pNear, whFar = tunnelH * pFar;
       // Left
       ctx.beginPath();
@@ -210,6 +234,12 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
       ctx.beginPath();
       ctx.moveTo(x1Far, yFar); ctx.lineTo(x1Far, yFar - whFar); ctx.lineTo(x1Near, yNear - whNear); ctx.lineTo(x1Near, yNear);
       ctx.fill();
+
+      // Neon strips on walls
+      ctx.strokeStyle = `hsl(${wallHue}, 100%, 50%, ${0.3 + feverFactor.current * 0.4})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x0Far, yFar - whFar); ctx.lineTo(x0Near, yNear - whNear); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x1Far, yFar - whFar); ctx.lineTo(x1Near, yNear - whNear); ctx.stroke();
     }
 
     // Graffiti
@@ -284,8 +314,6 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
         ctx.fillStyle = "#ff0033";
         ctx.fillRect(x - size, y - size, size * 2, size);
         ctx.strokeRect(x - size, y - size, size * 2, size);
-        ctx.fillStyle = "rgba(255,255,255,0.4)";
-        ctx.fillRect(x - size, y - size, size * 2, size * 0.2);
       } else if (o.type === "barrier-high") {
         const h_bar = size * 3.5;
         ctx.fillStyle = "#0066ff";
@@ -295,6 +323,18 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
       } else {
         // Train
         const trainH = size * 4;
+
+        // Train Reflection
+        if (o.z < 4) {
+          ctx.save();
+          ctx.globalAlpha = 0.1 * (1 - o.z/4);
+          ctx.translate(x, y + 5);
+          ctx.scale(1, -0.3);
+          ctx.fillStyle = "#3d5a73";
+          ctx.fillRect(-size, 0, size * 2, trainH);
+          ctx.restore();
+        }
+
         const grad = ctx.createLinearGradient(x - size, 0, x + size, 0);
         grad.addColorStop(0, "#2a3d4f"); grad.addColorStop(0.5, "#3d5a73"); grad.addColorStop(1, "#2a3d4f");
         ctx.fillStyle = grad;
@@ -305,21 +345,67 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
         ctx.fillStyle = "#ffffaa";
         ctx.beginPath(); ctx.arc(x - size * 0.6, y - size * 0.6, size * 0.3, 0, Math.PI * 2);
         ctx.arc(x + size * 0.6, y - size * 0.6, size * 0.3, 0, Math.PI * 2); ctx.fill();
-        // Windows
-        ctx.shadowBlur = 0; ctx.fillStyle = "rgba(0, 150, 255, 0.4)";
-        ctx.fillRect(x - size * 0.8, y - trainH * 0.8, size * 1.6, size * 0.8);
       }
       ctx.restore();
     });
 
     // 4. PLAYER AVATAR
-    const px = getX(playerLane.current, 1);
+    const px = getX(smoothedLaneX.current, 1);
     const py = h * 0.88;
 
     if (lm) {
       const avatarScale = w * 0.4;
       const avatarY = py - (playerState.current === "jumping" ? h * 0.3 : 0);
-      const neonColor = playerState.current === "jumping" ? "#fbbf24" : playerState.current === "ducking" ? "#38bdf8" : "#ffffff";
+      const neonColor = feverFactor.current > 0.5 ? `hsl(${now * 0.2 % 360}, 100%, 70%)` : (playerState.current === "jumping" ? "#fbbf24" : playerState.current === "ducking" ? "#38bdf8" : "#ffffff");
+
+      // Motion Trail
+      if (isPlaying && currentSpeed.current > 0.2) {
+        trail.current.push({ x: px, y: avatarY, a: 0.6 });
+        if (trail.current.length > 10) trail.current.shift();
+      } else {
+        trail.current = [];
+      }
+
+      trail.current.forEach((t, i) => {
+        t.a *= 0.9;
+        ctx.save();
+        ctx.globalAlpha = t.a * (i / trail.current.length);
+        ctx.strokeStyle = neonColor;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(t.x, t.y - avatarScale * 0.4, avatarScale * 0.3, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      });
+
+      // Player Reflection
+      ctx.save();
+      ctx.globalAlpha = 0.2;
+      ctx.translate(px, py + h * 0.02);
+      ctx.scale(1, -0.4);
+      ctx.strokeStyle = neonColor;
+      ctx.lineWidth = 8;
+      const drawSkellie = (yOff: number) => {
+        const p_v = (i: number) => ({ x: (0.5 - lm[i].x) * avatarScale, y: (lm[i].y - baselineY.current) * avatarScale + yOff });
+        const conn: [number, number][] = [[11,12], [11,13], [13,15], [12,14], [14,16], [11,23], [12,24], [23,24], [23,25], [24,26]];
+        conn.forEach(([a, b]) => {
+          const p1 = p_v(a), p2 = p_v(b);
+          ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+        });
+        const head = p_v(0);
+        ctx.beginPath(); ctx.arc(head.x, head.y, avatarScale * 0.18, 0, Math.PI * 2); ctx.stroke();
+      };
+      drawSkellie(0);
+      ctx.restore();
+
+      // Actual Player
+      ctx.save();
+      ctx.translate(px, avatarY);
+      ctx.strokeStyle = neonColor;
+      ctx.shadowColor = neonColor; ctx.shadowBlur = 30;
+      ctx.lineWidth = 12; ctx.lineCap = "round";
+      drawSkellie(0);
+      ctx.restore();
 
       // Status Icon
       if (playerState.current !== "normal") {
@@ -327,22 +413,7 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
         ctx.fillStyle = neonColor;
         ctx.fillText(playerState.current === "jumping" ? "⬆️" : "⬇️", px + w * 0.25, avatarY - h * 0.15);
       }
-
-      ctx.save();
-      ctx.translate(px, avatarY);
-      ctx.strokeStyle = neonColor;
-      ctx.shadowColor = neonColor; ctx.shadowBlur = 30;
-      ctx.lineWidth = 12; ctx.lineCap = "round";
-
-      const p_v = (i: number) => ({ x: (0.5 - lm[i].x) * avatarScale, y: (lm[i].y - baselineY.current) * avatarScale });
-      const conn: [number, number][] = [[11,12], [11,13], [13,15], [12,14], [14,16], [11,23], [12,24], [23,24], [23,25], [24,26]];
-      conn.forEach(([a, b]) => {
-        const p1 = p_v(a), p2 = p_v(b);
-        ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
-      });
-      const head = p_v(0);
-      ctx.beginPath(); ctx.arc(head.x, head.y, avatarScale * 0.18, 0, Math.PI * 2); ctx.stroke();
-      ctx.restore();
+    }
 
       // Running Dust Particles
       if (isPlaying && playerState.current === "normal") {

@@ -4,17 +4,40 @@ import { usePoseCamera, type FrameInfo } from "@/lib/usePoseCamera";
 import { MOVES, type Move } from "@/lib/dance";
 import { audio } from "@/lib/audioUtils";
 
-type KidPose = { move: Move; name: string; emoji: string; hint: string };
+type KidPose = {
+  move: Move;
+  name: string;
+  emoji: string;
+  hint: string;
+  silhouette?: { [key: number]: { x: number, y: number } }
+};
+type Leaf = { x: number; y: number; r: number; vx: number; vy: number; rotation: number; dr: number; color: string };
 
 const KID_POSES: KidPose[] = [
-  { id: "both-up", name: "الزرافة", emoji: "🦒", hint: "ارفع يديك فوق راسك مثل رقبة الزرافة" },
-  { id: "t-pose", name: "الطيارة", emoji: "✈️", hint: "افرد ذراعيك مثل جناحين الطيارة" },
-  { id: "clap", name: "السمكة", emoji: "🐟", hint: "اجمع يديك قدام صدرك مثل السمكة" },
-  { id: "squat", name: "الضفدع", emoji: "🐸", hint: "انزل قرفصاء مثل الضفدع" },
-  { id: "right-up", name: "الفيل", emoji: "🐘", hint: "ارفع يدك اليمنى مثل خرطوم الفيل" },
-  { id: "left-up", name: "الأرنب", emoji: "🐰", hint: "ارفع يدك اليسرى مثل أذن الأرنب" },
-  { id: "lean-right", name: "الشجرة يمين", emoji: "🌳", hint: "مِل بجسمك لليمين مثل الشجرة مع الهواء" },
-  { id: "lean-left", name: "الشجرة يسار", emoji: "🌴", hint: "مِل بجسمك لليسار مثل النخلة" },
+  { id: "both-up", name: "الزرافة", emoji: "🦒", hint: "ارفع يديك فوق راسك مثل رقبة الزرافة",
+    silhouette: { 15: {x: 0.4, y: 0.1}, 16: {x: 0.6, y: 0.1}, 13: {x: 0.42, y: 0.3}, 14: {x: 0.58, y: 0.3}, 11: {x: 0.45, y: 0.45}, 12: {x: 0.55, y: 0.45} }
+  },
+  { id: "t-pose", name: "الطيارة", emoji: "✈️", hint: "افرد ذراعيك مثل جناحين الطيارة",
+    silhouette: { 15: {x: 0.1, y: 0.45}, 16: {x: 0.9, y: 0.45}, 13: {x: 0.3, y: 0.45}, 14: {x: 0.7, y: 0.45}, 11: {x: 0.45, y: 0.45}, 12: {x: 0.55, y: 0.45} }
+  },
+  { id: "clap", name: "السمكة", emoji: "🐟", hint: "اجمع يديك قدام صدرك مثل السمكة",
+    silhouette: { 15: {x: 0.48, y: 0.5}, 16: {x: 0.52, y: 0.5}, 13: {x: 0.4, y: 0.6}, 14: {x: 0.6, y: 0.6}, 11: {x: 0.45, y: 0.45}, 12: {x: 0.55, y: 0.45} }
+  },
+  { id: "squat", name: "الضفدع", emoji: "🐸", hint: "انزل قرفصاء مثل الضفدع",
+    silhouette: { 11: {x: 0.45, y: 0.6}, 12: {x: 0.55, y: 0.6}, 23: {x: 0.45, y: 0.8}, 24: {x: 0.55, y: 0.8}, 25: {x: 0.35, y: 0.9}, 26: {x: 0.65, y: 0.9} }
+  },
+  { id: "right-up", name: "الفيل", emoji: "🐘", hint: "ارفع يدك اليمنى مثل خرطوم الفيل",
+    silhouette: { 16: {x: 0.6, y: 0.1}, 14: {x: 0.58, y: 0.3}, 12: {x: 0.55, y: 0.45}, 15: {x: 0.4, y: 0.6}, 13: {x: 0.42, y: 0.55}, 11: {x: 0.45, y: 0.45} }
+  },
+  { id: "left-up", name: "الأرنب", emoji: "🐰", hint: "ارفع يدك اليسرى مثل أذن الأرنب",
+    silhouette: { 15: {x: 0.4, y: 0.1}, 13: {x: 0.42, y: 0.3}, 11: {x: 0.45, y: 0.45}, 16: {x: 0.6, y: 0.6}, 14: {x: 0.58, y: 0.55}, 12: {x: 0.55, y: 0.45} }
+  },
+  { id: "lean-right", name: "الشجرة يمين", emoji: "🌳", hint: "مِل بجسمك لليمين مثل الشجرة مع الهواء",
+    silhouette: { 11: {x: 0.55, y: 0.4}, 12: {x: 0.65, y: 0.4}, 23: {x: 0.45, y: 0.8}, 24: {x: 0.55, y: 0.8} }
+  },
+  { id: "lean-left", name: "الشجرة يسار", emoji: "🌴", hint: "مِل بجسمك لليسار مثل النخلة",
+    silhouette: { 11: {x: 0.35, y: 0.4}, 12: {x: 0.45, y: 0.4}, 23: {x: 0.45, y: 0.8}, 24: {x: 0.55, y: 0.8} }
+  },
 ]
   .map((k) => {
     const move = MOVES.find((m) => m.id === k.id);
@@ -40,6 +63,7 @@ export default function AnimalPoses({ onBack }: { onBack: () => void }) {
   const idxRef = useRef(0);
   const holdRef = useRef(0);
   const roundEnd = useRef(0);
+  const leaves = useRef<Leaf[]>([]);
 
   const nextRound = (now: number) => {
     idxRef.current += 1;
@@ -58,6 +82,25 @@ export default function AnimalPoses({ onBack }: { onBack: () => void }) {
   };
 
   const onFrame = useCallback(({ lm, ctx, w, h, now }: FrameInfo) => {
+    // Nature Particles Update
+    if (leaves.current.length < 15) {
+      leaves.current.push({
+        x: Math.random() * w, y: -20,
+        r: 10 + Math.random() * 15,
+        vx: (Math.random() - 0.5) * 2,
+        vy: 1 + Math.random() * 2,
+        rotation: Math.random() * Math.PI * 2,
+        dr: (Math.random() - 0.5) * 0.1,
+        color: `hsl(${20 + Math.random() * 100}, 70%, 40%)`
+      });
+    }
+    leaves.current.forEach(l => {
+      l.x += l.vx + Math.sin(now * 0.001) * 0.5;
+      l.y += l.vy;
+      l.rotation += l.dr;
+      if (l.y > h + 20) l.y = -20;
+    });
+
     if (phaseRef.current !== "playing") return;
     const pose = orderRef.current[idxRef.current];
     if (!pose) return;
@@ -87,6 +130,63 @@ export default function AnimalPoses({ onBack }: { onBack: () => void }) {
     }
 
     if (now >= roundEnd.current) nextRound(now);
+
+    // 3. Drawing
+    // Draw Nature Particles
+    leaves.current.forEach(l => {
+      ctx.save();
+      ctx.translate(l.x, l.y);
+      ctx.rotate(l.rotation);
+      ctx.fillStyle = l.color;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, l.r, l.r * 0.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Leaf vein
+      ctx.strokeStyle = "rgba(0,0,0,0.1)";
+      ctx.beginPath(); ctx.moveTo(-l.r, 0); ctx.lineTo(l.r, 0); ctx.stroke();
+      ctx.restore();
+    });
+
+    // Silhouette (Ghost Skeleton)
+    if (pose && pose.silhouette) {
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+      ctx.setLineDash([8, 4]);
+      ctx.lineWidth = 10;
+      ctx.lineCap = "round";
+
+      const sil = pose.silhouette;
+      const conn: [number, number][] = [[11,12], [11,13], [13,15], [12,14], [14,16], [11,23], [12,24], [23,24]];
+      conn.forEach(([a, b]) => {
+        if (sil[a] && sil[b]) {
+          ctx.beginPath();
+          ctx.moveTo(sil[a].x * w, sil[a].y * h);
+          ctx.lineTo(sil[b].x * w, sil[b].y * h);
+          ctx.stroke();
+        }
+      });
+      ctx.restore();
+    }
+
+    // Actual Skeleton with Glow if matching
+    if (lm) {
+      ctx.save();
+      const glow = match > 0.6 ? "0 0 25px hsl(140 90% 60%)" : "none";
+      ctx.strokeStyle = match > 0.6 ? "hsl(140 90% 60%)" : "white";
+      ctx.lineWidth = 10;
+      ctx.lineCap = "round";
+      const conn: [number, number][] = [[11,12], [11,13], [13,15], [12,14], [14,16], [11,23], [12,24], [23,24], [23,25], [24,26]];
+      conn.forEach(([a, b]) => {
+        if (lm[a] && lm[b]) {
+          ctx.beginPath();
+          ctx.moveTo(lm[a].x * w, lm[a].y * h);
+          ctx.lineTo(lm[b].x * w, lm[b].y * h);
+          ctx.stroke();
+        }
+      });
+      ctx.restore();
+    }
   }, []);
 
   const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera(onFrame, "hsl(140 90% 65%)");

@@ -4,7 +4,8 @@ import { mirrored, usePoseCamera, type FrameInfo } from "@/lib/usePoseCamera";
 import { L } from "@/lib/dance";
 import { audio } from "@/lib/audioUtils";
 
-type Star = { x: number; y: number; vy: number; kind: "star" | "bomb"; r: number };
+type Star = { x: number; y: number; vy: number; kind: "star" | "bomb"; r: number; rotation: number; trail: {x: number, y: number}[] };
+type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: string; size: number };
 
 const GAME_MS = 60000;
 
@@ -17,7 +18,22 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
   const items = useRef<Star[]>([]);
   const spawnAt = useRef(0);
   const endAt = useRef(0);
+  const particles = useRef<Particle[]>([]);
+  const flashOpacity = useRef(0);
   const popRef = useRef<{ x: number; y: number; t: number; kind: Star["kind"] }[]>([]);
+
+  const spawnParticles = (x: number, y: number, color: string, count = 10) => {
+    for (let i = 0; i < count; i++) {
+      particles.current.push({
+        x, y,
+        vx: (Math.random() - 0.5) * 10,
+        vy: (Math.random() - 0.5) * 10,
+        life: 1,
+        color,
+        size: Math.random() * 4 + 1
+      });
+    }
+  };
 
   const onFrame = useCallback(({ lm, ctx, w, h, dt, now }: FrameInfo) => {
     if (phaseRef.current === "playing") {
@@ -34,14 +50,22 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
           vy: 0.16 + Math.random() * 0.12,
           kind: Math.random() < 0.18 ? "bomb" : "star",
           r: 0.075,
+          rotation: 0,
+          trail: []
         });
       }
     }
 
     const hands = [mirrored(lm?.[L.lWrist]), mirrored(lm?.[L.rWrist])].filter(Boolean) as { x: number; y: number }[];
 
+    flashOpacity.current *= 0.9;
+
     items.current = items.current.filter((it) => {
       it.y += it.vy * dt;
+      it.rotation += dt * 2;
+      it.trail.push({x: it.x, y: it.y});
+      if (it.trail.length > 8) it.trail.shift();
+
       let hit = false;
       if (phaseRef.current === "playing") {
         for (const hnd of hands) {
@@ -52,46 +76,90 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
         }
       }
       if (hit) {
-        popRef.current.push({ x: it.x, y: it.y, t: now, kind: it.kind });
         if (it.kind === "star") {
           setScore((s) => s + 100);
           setCaught((c) => c + 1);
           audio.playCoin();
+          flashOpacity.current = 0.3;
+          spawnParticles(it.x * w, it.y * h, "gold", 15);
         } else {
           setScore((s) => Math.max(0, s - 50));
           audio.playFail();
+          spawnParticles(it.x * w, it.y * h, "#333", 20);
         }
         return false;
       }
       return it.y < 1.15;
     });
 
-    // draw falling items
+    // Draw Falling Items
     for (const it of items.current) {
       const px = it.x * w;
       const py = it.y * h;
-      const size = it.r * w * 1.5;
-      ctx.save();
-      ctx.font = `${size}px serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.shadowColor = it.kind === "star" ? "gold" : "red";
-      ctx.shadowBlur = 22;
-      ctx.fillText(it.kind === "star" ? "⭐" : "💣", px, py);
-      ctx.restore();
+      const r = it.r * w;
+
+      if (it.kind === "star") {
+        // Star Trail
+        ctx.beginPath();
+        it.trail.forEach((pos, i) => {
+          ctx.lineTo(pos.x * w, pos.y * h);
+        });
+        ctx.strokeStyle = `rgba(255, 215, 0, 0.3)`;
+        ctx.lineWidth = r * 0.5;
+        ctx.lineCap = "round";
+        ctx.stroke();
+
+        // Glowing Star
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(it.rotation);
+        ctx.shadowColor = "gold";
+        ctx.shadowBlur = 20;
+        ctx.fillStyle = "gold";
+        ctx.beginPath();
+        for (let i = 0; i < 5; i++) {
+          ctx.lineTo(Math.cos((i * 72 * Math.PI) / 180) * r, Math.sin((i * 72 * Math.PI) / 180) * r);
+          ctx.lineTo(Math.cos(((i * 72 + 36) * Math.PI) / 180) * (r * 0.4), Math.sin(((i * 72 + 36) * Math.PI) / 180) * (r * 0.4));
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      } else {
+        // Pulsing Bomb
+        const pulse = 1 + Math.sin(now * 0.01) * 0.1;
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.scale(pulse, pulse);
+
+        // Smoke
+        if (Math.random() < 0.3) spawnParticles(px, py, "#333", 1);
+
+        ctx.fillStyle = "black";
+        ctx.beginPath(); ctx.arc(0, 0, r * 0.8, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "red";
+        ctx.beginPath(); ctx.arc(r * 0.3, -r * 0.3, r * 0.2, 0, Math.PI * 2); ctx.fill(); // Highlight
+        ctx.strokeStyle = "#444";
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(0, -r * 0.8); ctx.quadraticCurveTo(r * 0.5, -r * 1.2, r * 0.8, -r * 0.8); ctx.stroke(); // Fuse
+        ctx.restore();
+      }
     }
 
-    // pop feedback
-    popRef.current = popRef.current.filter((p) => now - p.t < 500);
-    for (const p of popRef.current) {
-      const k = (now - p.t) / 500;
-      ctx.save();
-      ctx.globalAlpha = 1 - k;
-      ctx.font = `${(0.06 + k * 0.06) * w * 1.6}px serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(p.kind === "star" ? "✨" : "💥", p.x * w, (p.y - k * 0.08) * h);
-      ctx.restore();
+    // Update & Draw Particles
+    particles.current.forEach(p => {
+      p.x += p.vx; p.y += p.vy;
+      p.life -= 0.02;
+      ctx.globalAlpha = p.life;
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+    });
+    particles.current = particles.current.filter(p => p.life > 0);
+    ctx.globalAlpha = 1;
+
+    // Light Burst Flash
+    if (flashOpacity.current > 0.01) {
+      ctx.fillStyle = `rgba(255, 255, 255, ${flashOpacity.current})`;
+      ctx.fillRect(0, 0, w, h);
     }
 
     // hand halos
@@ -116,6 +184,8 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
   const play = async () => {
     await start();
     items.current = [];
+    particles.current = [];
+    flashOpacity.current = 0;
     popRef.current = [];
     setScore(0);
     setCaught(0);

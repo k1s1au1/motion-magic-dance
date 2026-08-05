@@ -4,9 +4,10 @@ import { mirrored, usePoseCamera, type FrameInfo } from "@/lib/usePoseCamera";
 import { L } from "@/lib/dance";
 import { audio } from "@/lib/audioUtils";
 
-type Balloon = { x: number; y: number; vy: number; drift: number; emoji: string; r: number };
+type Balloon = { x: number; y: number; vy: number; drift: number; color: string; r: number; phase: number };
+type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: string; size: number };
 
-const BALLOONS = ["🎈", "🟣", "🔵", "🟢", "🟡"];
+const COLORS = ["#ff4d4d", "#4dff4d", "#4d4dff", "#ffff4d", "#ff4dff", "#4dffff"];
 const GAME_MS = 60000;
 
 export default function BalloonPop({ onBack }: { onBack: () => void }) {
@@ -16,9 +17,22 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
   const [timeLeft, setTimeLeft] = useState(60);
   const phaseRef = useRef<"idle" | "playing" | "finished">("idle");
   const items = useRef<Balloon[]>([]);
-  const bursts = useRef<{ x: number; y: number; t: number }[]>([]);
+  const particles = useRef<Particle[]>([]);
   const spawnAt = useRef(0);
   const endAt = useRef(0);
+
+  const spawnParticles = (x: number, y: number, color: string) => {
+    for (let i = 0; i < 20; i++) {
+      particles.current.push({
+        x, y,
+        vx: (Math.random() - 0.5) * 15,
+        vy: (Math.random() - 0.5) * 15,
+        life: 1,
+        color,
+        size: Math.random() * 6 + 2
+      });
+    }
+  };
 
   const onFrame = useCallback(({ lm, ctx, w, h, dt, now }: FrameInfo) => {
     if (phaseRef.current === "playing") {
@@ -35,8 +49,9 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
           y: 1.12,
           vy: 0.14 + Math.random() * 0.1,
           drift: (Math.random() - 0.5) * 0.06,
-          emoji: BALLOONS[Math.floor(Math.random() * BALLOONS.length)] ?? "🎈",
+          color: COLORS[Math.floor(Math.random() * COLORS.length)] ?? "#ff0000",
           r: 0.08,
+          phase: Math.random() * Math.PI * 2
         });
       }
     }
@@ -49,7 +64,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
       if (phaseRef.current === "playing") {
         for (const hnd of hands) {
           if (Math.hypot(hnd.x - b.x, (hnd.y - b.y) * (h / w)) < b.r) {
-            bursts.current.push({ x: b.x, y: b.y, t: now });
+            spawnParticles(b.x * w, b.y * h, b.color);
             setPopped((p) => p + 1);
             audio.playPop();
             return false;
@@ -64,27 +79,45 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
     });
 
     for (const b of items.current) {
+      const bx = b.x * w;
+      const by = b.y * h;
+      const br = b.r * w;
+
       ctx.save();
-      ctx.font = `${b.r * w * 1.7}px serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.shadowColor = "hsl(320 100% 70%)";
-      ctx.shadowBlur = 18;
-      ctx.fillText(b.emoji, b.x * w, b.y * h);
+      // Draw String
+      ctx.beginPath();
+      ctx.moveTo(bx, by + br);
+      for (let i = 0; i < 10; i++) {
+        const sy = by + br + i * (br * 0.2);
+        const sx = bx + Math.sin(now * 0.01 + i * 0.5 + b.phase) * 5;
+        ctx.lineTo(sx, sy);
+      }
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Draw Balloon (3D shaded)
+      const grad = ctx.createRadialGradient(bx - br * 0.3, by - br * 0.3, br * 0.1, bx, by, br);
+      grad.addColorStop(0, "white");
+      grad.addColorStop(0.2, b.color);
+      grad.addColorStop(1, "rgba(0,0,0,0.3)");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.ellipse(bx, by, br * 0.85, br, 0, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
     }
 
-    bursts.current = bursts.current.filter((p) => now - p.t < 450);
-    for (const p of bursts.current) {
-      const k = (now - p.t) / 450;
-      ctx.save();
-      ctx.globalAlpha = 1 - k;
-      ctx.font = `${(0.07 + k * 0.07) * w * 1.6}px serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("💥", p.x * w, p.y * h);
-      ctx.restore();
-    }
+    // Update & Draw Particles
+    particles.current.forEach(p => {
+      p.x += p.vx; p.y += p.vy;
+      p.life -= 0.03;
+      ctx.globalAlpha = p.life;
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+    });
+    particles.current = particles.current.filter(p => p.life > 0);
+    ctx.globalAlpha = 1;
 
     for (const hnd of hands) {
       ctx.save();
@@ -107,7 +140,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
   const play = async () => {
     await start();
     items.current = [];
-    bursts.current = [];
+    particles.current = [];
     setPopped(0);
     setMissed(0);
     setTimeLeft(60);
