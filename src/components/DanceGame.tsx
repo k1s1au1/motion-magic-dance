@@ -258,6 +258,9 @@ export default function DanceGame() {
             <button onClick={start} className="btn-neon mt-5 w-full">
               ابدأ الرقص 💃
             </button>
+            <Link to="/kids" className="btn-kid mt-3 block w-full text-center">
+              ألعاب الصغار 🎪
+            </Link>
           </div>
         )}
         {phase === "loading" && <p className="text-center text-sm text-muted-foreground">جاري تجهيز الكاميرا والتتبع…</p>}
