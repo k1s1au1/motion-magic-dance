@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import GameStage, { KidHud } from "./GameStage";
 import { usePoseCamera, type FrameInfo } from "@/lib/usePoseCamera";
 import { L, type Landmarks } from "@/lib/dance";
+import { audio } from "@/lib/audioUtils";
 
 type Mode = "dance" | "freeze";
 const ROUNDS = 8;
@@ -22,10 +23,14 @@ export default function FreezeDance({ onBack }: { onBack: () => void }) {
   const motionRef = useRef(0);
   const scoredRef = useRef(false);
   const flash = useRef<{ text: string; t: number; good: boolean } | null>(null);
+  const modeChangeAt = useRef(0);
 
   const setModeBoth = (m: Mode) => {
     modeRef.current = m;
     setMode(m);
+    modeChangeAt.current = performance.now();
+    if (m === "freeze") audio.playStop();
+    else audio.playStart();
   };
 
   const onFrame = useCallback(({ lm, ctx, w, h, now }: FrameInfo) => {
@@ -50,6 +55,7 @@ export default function FreezeDance({ onBack }: { onBack: () => void }) {
         if (energy > 0.35) {
           flash.current = { text: "تحركت! ❄️", t: now, good: false };
           scoredRef.current = true;
+          audio.playFail();
         }
       }
       if (now >= switchAt.current) {
@@ -61,6 +67,7 @@ export default function FreezeDance({ onBack }: { onBack: () => void }) {
           if (!scoredRef.current) {
             setScore((s) => s + 500);
             flash.current = { text: "تمثال ممتاز! 🗿", t: now, good: true };
+            audio.playSuccess();
           }
           roundRef.current += 1;
           setRound(roundRef.current);
@@ -77,10 +84,30 @@ export default function FreezeDance({ onBack }: { onBack: () => void }) {
     }
 
     // overlay tint
-    ctx.save();
-    ctx.fillStyle = modeRef.current === "freeze" ? "hsl(200 100% 60% / 0.16)" : "hsl(280 100% 60% / 0.08)";
-    if (phaseRef.current === "playing") ctx.fillRect(0, 0, w, h);
-    ctx.restore();
+    if (phaseRef.current === "playing") {
+      ctx.save();
+      const transitionElapsed = now - modeChangeAt.current;
+      const transitionAlpha = transitionElapsed < 400 ? 0.35 - (transitionElapsed / 400) * 0.15 : 0.15;
+
+      if (modeRef.current === "freeze") {
+        ctx.fillStyle = `oklch(0.7 0.15 230 / ${transitionAlpha})`; // Blue
+      } else {
+        ctx.fillStyle = `oklch(0.8 0.15 90 / ${transitionAlpha})`; // Yellow/Lime
+      }
+      ctx.fillRect(0, 0, w, h);
+
+      // Draw big emoji during transition
+      if (transitionElapsed < 1000) {
+        const emoji = modeRef.current === "freeze" ? "❄️" : "🎵";
+        const scale = 1 + Math.sin((transitionElapsed / 1000) * Math.PI) * 0.5;
+        ctx.globalAlpha = 1 - transitionElapsed / 1000;
+        ctx.font = `${w * 0.3 * scale}px system-ui`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(emoji, w / 2, h / 2);
+      }
+      ctx.restore();
+    }
 
     if (flash.current && now - flash.current.t < 900) {
       const f = flash.current;
@@ -89,7 +116,7 @@ export default function FreezeDance({ onBack }: { onBack: () => void }) {
       ctx.font = `bold ${w * 0.09}px system-ui, sans-serif`;
       ctx.textAlign = "center";
       ctx.fillStyle = f.good ? "hsl(140 90% 60%)" : "hsl(0 90% 65%)";
-      ctx.fillText(f.text, w / 2, h * 0.5);
+      ctx.fillText(f.text, w / 2, h * 0.7);
       ctx.restore();
     }
   }, []);
