@@ -142,3 +142,104 @@
     color: var(--color-foreground);
   }
 }
+
+/* ---- Dance game design tokens & components ---- */
+:root {
+  --background: oklch(0.14 0.05 300);
+  --foreground: oklch(0.97 0.01 300);
+  --muted-foreground: oklch(0.72 0.04 300);
+  --neon-pink: oklch(0.72 0.24 350);
+  --neon-cyan: oklch(0.85 0.16 200);
+  --neon-lime: oklch(0.89 0.21 135);
+  --neon-amber: oklch(0.85 0.17 80);
+}
+
+@theme inline {
+  --color-neon-pink: var(--neon-pink);
+  --color-neon-cyan: var(--neon-cyan);
+  --color-neon-lime: var(--neon-lime);
+}
+
+.stage {
+  background:
+    radial-gradient(90% 60% at 20% 0%, oklch(0.3 0.16 330 / 0.55), transparent 70%),
+    radial-gradient(80% 60% at 90% 20%, oklch(0.35 0.14 210 / 0.5), transparent 70%),
+    var(--background);
+}
+
+.title-glow {
+  background: linear-gradient(100deg, var(--neon-pink), var(--neon-cyan));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 18px oklch(0.72 0.24 350 / 0.45));
+}
+
+.hud-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  border-radius: var(--radius-xl);
+  border: 1px solid oklch(1 0 0 / 0.12);
+  background: oklch(0.14 0.05 300 / 0.55);
+  backdrop-filter: blur(10px);
+  padding: 0.5rem 0.85rem;
+}
+.hud-label {
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  color: var(--muted-foreground);
+}
+.hud-value {
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--neon-cyan);
+}
+
+.move-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  border-radius: 999px;
+  border: 1px solid oklch(1 0 0 / 0.16);
+  background: oklch(0.2 0.09 320 / 0.7);
+  padding: 0.6rem 1.2rem;
+  box-shadow: 0 0 30px oklch(0.72 0.24 350 / 0.3);
+  backdrop-filter: blur(8px);
+}
+
+.beat-bar {
+  background: linear-gradient(90deg, var(--neon-pink), var(--neon-amber));
+  transition: width 0.08s linear;
+}
+.match-bar {
+  background: linear-gradient(90deg, var(--neon-cyan), var(--neon-lime));
+  transition: width 0.12s ease-out;
+}
+
+.btn-neon {
+  border-radius: 999px;
+  padding: 0.95rem 1.5rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: oklch(0.16 0.05 300);
+  background: linear-gradient(100deg, var(--neon-pink), var(--neon-cyan));
+  box-shadow: 0 12px 40px oklch(0.72 0.24 350 / 0.35);
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+.btn-neon:active {
+  transform: scale(0.97);
+  filter: brightness(1.1);
+}
+
+@keyframes pop-in {
+  0% { transform: scale(0.6); opacity: 0; }
+  30% { transform: scale(1.15); opacity: 1; }
+  70% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.05) translateY(-14px); opacity: 0; }
+}
+.pop {
+  animation: pop-in 1s ease-out forwards;
+  text-shadow: 0 0 24px currentColor;
+}
