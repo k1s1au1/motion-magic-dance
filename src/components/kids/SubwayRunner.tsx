@@ -101,69 +101,188 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
       coins.current.push({ id: nextId.current++, lane: Math.floor(Math.random() * 3) as Lane, z: 5 });
     }
 
-    // 3. Drawing: Pseudo-3D
+    // 3. Drawing: Advanced Pseudo-3D Tunnel
     const centerX = w / 2;
-    const horizonY = h * 0.4;
-    const roadW = w * 0.8;
+    const horizonY = h * 0.35;
+    const roadW = w * 0.9;
+    const tunnelH = h * 0.8;
+
+    // Camera shake based on player state
+    ctx.save();
+    if (phaseRef.current === "playing") {
+      const shake = Math.sin(now * 0.02) * (playerState.current !== "normal" ? 4 : 1.5);
+      ctx.translate(shake, shake);
+    }
 
     const getX = (lane: Lane, z: number) => {
-      const perspective = 1 / z;
+      const p = 1 / z;
       const xOffset = (lane - 1) * (roadW / 3);
-      return centerX + xOffset * perspective;
+      return centerX + xOffset * p;
     };
-
     const getY = (z: number) => horizonY + (h - horizonY) * (1 / z);
 
-    // Draw Tracks
-    ctx.strokeStyle = "rgba(255,255,255,0.2)";
-    ctx.lineWidth = 2;
-    for (let l = 0; l <= 3; l++) {
-      const xTop = centerX + (l - 1.5) * 10;
-      const xBot = centerX + (l - 1.5) * (roadW / 3) * 2;
+    // DRAW TUNNEL BACKGROUND
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
+    skyGrad.addColorStop(0, "#050510"); // Deep dark
+    skyGrad.addColorStop(0.5, "#101025");
+    skyGrad.addColorStop(1, "#050510");
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, w, h);
+
+    // Draw Perspective Tunnel Walls
+    ctx.beginPath();
+    ctx.moveTo(centerX - 5, horizonY);
+    ctx.lineTo(centerX + 5, horizonY);
+    ctx.lineTo(w, h * 0.8);
+    ctx.lineTo(w, h);
+    ctx.lineTo(0, h);
+    ctx.lineTo(0, h * 0.8);
+    ctx.closePath();
+    ctx.fillStyle = "#1a1a2e";
+    ctx.fill();
+
+    // Ceiling Lights (Movement effect)
+    const lightSpacing = 1.5;
+    const lightZOffset = (distance % lightSpacing);
+    ctx.fillStyle = "rgba(255, 255, 150, 0.4)";
+    for (let z = 10 - lightZOffset; z > 0.5; z -= lightSpacing) {
+      const p = 1 / z;
+      const size = (w * 0.1) * p;
+      const ly = horizonY - (tunnelH * 0.5) * p;
       ctx.beginPath();
-      ctx.moveTo(xTop, horizonY);
+      ctx.ellipse(centerX, ly, size * 2, size * 0.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Glow on walls
+      ctx.fillStyle = `rgba(100, 100, 255, ${0.1 / z})`;
+      ctx.fillRect(0, getY(z), w, 2);
+      ctx.fillStyle = "rgba(255, 255, 150, 0.4)";
+    }
+
+    // Track Ties (Sleeper)
+    const tieSpacing = 0.4;
+    const tieZOffset = (distance % tieSpacing);
+    ctx.fillStyle = "#333";
+    for (let z = 6 - tieZOffset; z > 0.5; z -= tieSpacing) {
+      const p = 1 / z;
+      const tw = roadW * p;
+      const ty = getY(z);
+      const th = 4 * p;
+      ctx.fillRect(centerX - tw / 2, ty, tw, th);
+    }
+
+    // Draw Tracks
+    ctx.strokeStyle = "#555";
+    ctx.lineWidth = 3;
+    for (let l = 0; l <= 3; l++) {
+      const xBot = centerX + (l - 1.5) * (roadW / 3) * 1.5;
+      ctx.beginPath();
+      ctx.moveTo(centerX, horizonY);
       ctx.lineTo(xBot, h);
       ctx.stroke();
     }
 
     // Draw Coins
-    ctx.fillStyle = "#FFD700";
     coins.current.forEach(c => {
-      if (c.z < 0.1) return;
+      if (c.z < 0.2 || c.z > 6) return;
       const x = getX(c.lane, c.z);
       const y = getY(c.z);
-      const size = (w * 0.05) / c.z;
+      const size = (w * 0.08) / c.z;
+
+      // Animated spinning coin
+      const spin = Math.sin(now * 0.01);
+      ctx.save();
+      ctx.translate(x, y - size);
+      ctx.scale(Math.abs(spin), 1);
       ctx.beginPath();
-      ctx.arc(x, y - size, size, 0, Math.PI * 2);
+      ctx.arc(0, 0, size, 0, Math.PI * 2);
+      ctx.fillStyle = "#FFD700";
       ctx.fill();
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = "gold";
+      ctx.strokeStyle = "#DAA520";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // Inner circle
+      ctx.beginPath();
+      ctx.arc(0, 0, size * 0.6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
     });
 
-    // Draw Obstacles
-    obstacles.current.forEach(o => {
-      if (o.z < 0.1) return;
+    // Draw Obstacles (Trains & Barriers)
+    obstacles.current.sort((a,b) => b.z - a.z).forEach(o => {
+      if (o.z < 0.2 || o.z > 8) return;
       const x = getX(o.lane, o.z);
       const y = getY(o.z);
-      const size = (w * 0.1) / o.z;
+      const size = (w * 0.15) / o.z;
 
-      ctx.fillStyle = o.type === "barrier-low" ? "#FF4444" : "#4444FF";
       if (o.type === "barrier-low") {
+        // 3D Barrier
+        ctx.fillStyle = "#cc0000";
         ctx.fillRect(x - size, y - size, size * 2, size);
+        ctx.fillStyle = "#990000";
+        ctx.fillRect(x - size, y - size * 0.2, size * 2, size * 0.2);
+        // Stripes
+        ctx.fillStyle = "#fff";
+        for (let i = -1; i < 1; i += 0.5) {
+          ctx.fillRect(x + i * size, y - size, size * 0.2, size);
+        }
       } else {
-        ctx.fillRect(x - size, y - size * 3, size * 2, size);
+        // Subway Train Car
+        const trainH = size * 3.5;
+        const grad = ctx.createLinearGradient(x - size, 0, x + size, 0);
+        grad.addColorStop(0, "#2c3e50");
+        grad.addColorStop(0.5, "#34495e");
+        grad.addColorStop(1, "#2c3e50");
+        ctx.fillStyle = grad;
+        ctx.fillRect(x - size, y - trainH, size * 2, trainH);
+
+        // Windows
+        ctx.fillStyle = "rgba(100, 200, 255, 0.6)";
+        ctx.fillRect(x - size * 0.7, y - trainH * 0.7, size * 1.4, size * 0.5);
+
+        // Front Lights
+        ctx.fillStyle = "#ffffaa";
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = "#ffff00";
+        ctx.beginPath();
+        ctx.arc(x - size * 0.6, y - size * 0.5, size * 0.2, 0, Math.PI * 2);
+        ctx.arc(x + size * 0.6, y - size * 0.5, size * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
       }
     });
 
-    // Draw Player Indicator
-    const px = centerX + (playerLane.current - 1) * (roadW / 4);
-    const py = h * 0.85;
-    ctx.font = `${w * 0.15}px system-ui`;
+    // Draw Player Indicator (Mirrored Body Skeleton hint)
+    const px = centerX + (playerLane.current - 1) * (roadW / 5);
+    const py = h * 0.82;
+    ctx.font = `${w * 0.2}px system-ui`;
     ctx.textAlign = "center";
     let emoji = "🏃";
     if (playerState.current === "jumping") emoji = "🚀";
     if (playerState.current === "ducking") emoji = "👇";
+
+    // Draw "Shadow" under player
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.beginPath();
+    ctx.ellipse(px, h * 0.92, w * 0.1, w * 0.03, 0, 0, Math.PI * 2);
+    ctx.fill();
+
     ctx.fillText(emoji, px, py);
+
+    // Speed lines effect
+    if (phaseRef.current === "playing") {
+      ctx.strokeStyle = "rgba(255,255,255,0.15)";
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 5; i++) {
+        const sx = Math.random() * w;
+        const sy = Math.random() * h;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(sx + (sx - centerX) * 0.1, sy + (sy - horizonY) * 0.1);
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
 
   }, []);
 
