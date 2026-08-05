@@ -8,13 +8,13 @@ type Mode = "dance" | "freeze";
 const ROUNDS = 8;
 
 export default function FreezeDance({ onBack }: { onBack: () => void }) {
-  const [phase, setPhase] = useState<"idle" | "playing" | "finished">("idle");
+  const [phase, setPhase] = useState<"idle" | "calibrating" | "playing" | "finished">("idle");
   const [mode, setMode] = useState<Mode>("dance");
   const [score, setScore] = useState(0);
   const [round, setRound] = useState(1);
   const [motion, setMotion] = useState(0);
 
-  const phaseRef = useRef<"idle" | "playing" | "finished">("idle");
+  const phaseRef = useRef<"idle" | "calibrating" | "playing" | "finished">("idle");
   const modeRef = useRef<Mode>("dance");
   const switchAt = useRef(0);
   const roundRef = useRef(1);
@@ -25,6 +25,7 @@ export default function FreezeDance({ onBack }: { onBack: () => void }) {
   const modeChangeAt = useRef(0);
   const discoLights = useRef<{x: number, y: number, r: number, vx: number, vy: number, color: string}[]>([]);
   const frostCrystals = useRef<{x: number, y: number, length: number, angle: number, opacity: number}[]>([]);
+  const calibrationTimer = useRef(0);
 
   const setModeBoth = (m: Mode) => {
     modeRef.current = m;
@@ -34,7 +35,10 @@ export default function FreezeDance({ onBack }: { onBack: () => void }) {
     else audio.playStart();
   };
 
-  const onFrame = useCallback(({ lm, ctx, w, h, now }: FrameInfo) => {
+  const onFrame = useCallback(({ lm, ctx, w, h, dt, now }: FrameInfo) => {
+    const isCalibrating = phaseRef.current === "calibrating";
+    const isPlaying = phaseRef.current === "playing";
+
     if (lm && prev.current) {
       let sum = 0;
       const joints = [L.lWrist, L.rWrist, L.lElbow, L.rElbow, L.nose, L.lKnee, L.rKnee];
@@ -47,6 +51,18 @@ export default function FreezeDance({ onBack }: { onBack: () => void }) {
     }
     if (lm) prev.current = lm;
     setMotion(Math.min(1, motionRef.current));
+
+    // Calibration Logic
+    if (isCalibrating) {
+      if (visible) {
+        calibrationTimer.current += dt;
+        if (calibrationTimer.current > 2.0) {
+          startPlaying();
+        }
+      } else {
+        calibrationTimer.current = 0;
+      }
+    }
 
     // DISCO LIGHTS SYSTEM
     if (discoLights.current.length === 0) {
@@ -256,14 +272,20 @@ export default function FreezeDance({ onBack }: { onBack: () => void }) {
     }
   }, []);
 
-  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera(onFrame, "hsl(280 100% 78%)");
+  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "hsl(280 100% 78%)");
 
   useEffect(() => {
     return () => { audio.stopMusic(); };
   }, []);
 
   const play = async () => {
+    calibrationTimer.current = 0;
     await start();
+    setPhaseBoth("calibrating");
+  };
+
+  const startPlaying = () => {
+    if (phaseRef.current === "playing") return;
     setScore(0);
     roundRef.current = 1; setRound(1);
     prev.current = null; motionRef.current = 0;
@@ -273,10 +295,17 @@ export default function FreezeDance({ onBack }: { onBack: () => void }) {
     phaseRef.current = "playing"; setPhase("playing");
   };
 
+  const setPhaseBoth = (p: typeof phase) => {
+    phaseRef.current = p;
+    setPhase(p);
+  };
+
   return (
     <GameStage
       videoRef={videoRef} canvasRef={canvasRef}
       title="تمثال!" emoji="🗿" onBack={onBack}
+      isCalibrating={phase === "calibrating"}
+      isPoseVisible={visible}
       hud={phase === "playing" ? (
         <>
           <KidHud label="النقاط" value={score.toLocaleString("ar-EG")} />

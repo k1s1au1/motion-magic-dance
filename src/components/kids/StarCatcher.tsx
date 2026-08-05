@@ -10,17 +10,18 @@ type Particle = { x: number; y: number; vx: number; vy: number; life: number; co
 const GAME_MS = 60000;
 
 export default function StarCatcher({ onBack }: { onBack: () => void }) {
-  const [phase, setPhase] = useState<"idle" | "playing" | "finished">("idle");
+  const [phase, setPhase] = useState<"idle" | "calibrating" | "playing" | "finished">("idle");
   const [score, setScore] = useState(0);
   const [caught, setCaught] = useState(0);
   const [timeLeft, setTimeLeft] = useState(60);
-  const phaseRef = useRef<"idle" | "playing" | "finished">("idle");
+  const phaseRef = useRef<"idle" | "calibrating" | "playing" | "finished">("idle");
   const items = useRef<Star[]>([]);
   const spawnAt = useRef(0);
   const endAt = useRef(0);
   const particles = useRef<Particle[]>([]);
   const flashOpacity = useRef(0);
   const nebulaPhase = useRef(0);
+  const calibrationTimer = useRef(0);
 
   const spawnParticles = (x: number, y: number, color: string, count = 15, glow = true) => {
     for (let i = 0; i < count; i++) {
@@ -32,6 +33,9 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
   };
 
   const onFrame = useCallback(({ lm, ctx, w, h, dt, now }: FrameInfo) => {
+    const isCalibrating = phaseRef.current === "calibrating";
+    const isPlaying = phaseRef.current === "playing";
+
     // 1. NEBULA SPACE BACKGROUND
     nebulaPhase.current += 0.005;
     const bgGrad = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, w);
@@ -39,7 +43,7 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
     bgGrad.addColorStop(1, "#050510");
     ctx.fillStyle = bgGrad; ctx.fillRect(0,0,w,h);
 
-    // Stars in background (Parallax hint)
+    // ... background stars ...
     ctx.fillStyle = "white";
     for(let i=0; i<30; i++) {
         const sx = (Math.sin(i*10)*0.5+0.5)*w, sy = ((i*20 + now*0.02) % h);
@@ -47,7 +51,19 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
         ctx.beginPath(); ctx.arc(sx, sy, 1, 0, Math.PI*2); ctx.fill();
     }
 
-    if (phaseRef.current === "playing") {
+    // Calibration Logic
+    if (isCalibrating) {
+      if (visible) {
+        calibrationTimer.current += dt;
+        if (calibrationTimer.current > 2.0) {
+          startPlaying();
+        }
+      } else {
+        calibrationTimer.current = 0;
+      }
+    }
+
+    if (isPlaying) {
       setTimeLeft(Math.max(0, Math.ceil((endAt.current - now) / 1000)));
       if (now >= endAt.current) {
         phaseRef.current = "finished"; setPhase("finished");
@@ -61,6 +77,7 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
         });
       }
     }
+    // ...
 
     const hands = [mirrored(lm?.[L.lWrist]), mirrored(lm?.[L.rWrist])].filter(Boolean) as { x: number; y: number }[];
     flashOpacity.current *= 0.9;
@@ -162,20 +179,34 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
     });
   }, []);
 
-  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera(onFrame, "rgba(0, 255, 255, 0.3)");
+  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "rgba(0, 255, 255, 0.3)");
 
   useEffect(() => { return () => { audio.stopMusic(); }; }, []);
 
   const play = async () => {
-    await start(); items.current = []; particles.current = []; flashOpacity.current = 0;
+    calibrationTimer.current = 0;
+    await start();
+    setPhaseBoth("calibrating");
+  };
+
+  const startPlaying = () => {
+    if (phaseRef.current === "playing") return;
+    items.current = []; particles.current = []; flashOpacity.current = 0;
     setScore(0); setCaught(0); setTimeLeft(60);
     spawnAt.current = performance.now(); endAt.current = performance.now() + GAME_MS;
     phaseRef.current = "playing"; setPhase("playing"); audio.startKidsMusic();
   };
 
+  const setPhaseBoth = (p: typeof phase) => {
+    phaseRef.current = p;
+    setPhase(p);
+  };
+
   return (
     <GameStage
       videoRef={videoRef} canvasRef={canvasRef} title="فضاء النجوم" emoji="⭐" onBack={onBack}
+      isCalibrating={phase === "calibrating"}
+      isPoseVisible={visible}
       hud={phase === "playing" ? (
         <>
           <KidHud label="النقاط" value={score.toLocaleString("ar-EG")} />

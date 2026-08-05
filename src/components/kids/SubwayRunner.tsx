@@ -13,12 +13,12 @@ const MAX_SPEED = 0.45;
 const SPAWN_RATE = 0.03;
 
 export default function SubwayRunner({ onBack }: { onBack: () => void }) {
-  const [phase, setPhase] = useState<"idle" | "counting" | "playing" | "finished">("idle");
+  const [phase, setPhase] = useState<"idle" | "calibrating" | "counting" | "playing" | "finished">("idle");
   const [score, setScore] = useState(0);
   const [distance, setDistance] = useState(0);
   const [countdown, setCountdown] = useState(3);
 
-  const phaseRef = useRef<"idle" | "counting" | "playing" | "finished">("idle");
+  const phaseRef = useRef<"idle" | "calibrating" | "counting" | "playing" | "finished">("idle");
   const obstacles = useRef<Obstacle[]>([]);
   const coins = useRef<Coin[]>([]);
   const particles = useRef<Particle[]>([]);
@@ -32,27 +32,18 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
   const smoothedLaneX = useRef(1);
   const trail = useRef<{x: number, y: number, a: number}[]>([]);
   const feverFactor = useRef(0);
+  const calibrationTimer = useRef(0);
 
   // Calibration
   const baselineY = useRef(0.5);
   const calibrated = useRef(false);
 
-  const spawnParticles = (x: number, y: number, color: string, count: number) => {
-    for (let i = 0; i < count; i++) {
-      particles.current.push({
-        x, y,
-        vx: (Math.random() - 0.5) * 12,
-        vy: (Math.random() - 0.5) * 12,
-        life: 1,
-        color,
-        size: Math.random() * 6 + 2
-      });
-    }
-  };
+  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "hsl(280 100% 70%)");
 
   const onFrame = useCallback(({ lm, ctx, w, h, dt, now }: FrameInfo) => {
     const isPlaying = phaseRef.current === "playing";
     const isCounting = phaseRef.current === "counting";
+    const isCalibrating = phaseRef.current === "calibrating";
 
     // 1. Logic: Body Tracking
     if (lm) {
@@ -77,6 +68,18 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
           stateTimer.current = now + 650;
           if (isPlaying) audio.playDuck();
         }
+      }
+    }
+
+    // Calibration Logic in Loop
+    if (isCalibrating) {
+      if (visible) {
+        calibrationTimer.current += dt;
+        if (calibrationTimer.current > 2.0) {
+          startCountdown();
+        }
+      } else {
+        calibrationTimer.current = 0;
       }
     }
 
@@ -161,6 +164,7 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
       });
       particles.current = particles.current.filter(p => p.life > 0);
     }
+    // ... drawing logic remains same, can be inside onFrame or moved to separate function ...
 
     // 3. Drawing: EXTREME VISUALS
     const centerX = w / 2;
@@ -464,8 +468,14 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
 
   const play = async () => {
     calibrated.current = false;
+    calibrationTimer.current = 0;
     await start();
 
+    setPhaseBoth("calibrating");
+  };
+
+  const startCountdown = async () => {
+    if (phaseRef.current === "counting") return;
     setPhaseBoth("counting");
     for (let i = 3; i > 0; i--) {
       setCountdown(i);
@@ -497,6 +507,8 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
       title="مغامرة المترو"
       emoji="🏃"
       onBack={onBack}
+      isCalibrating={phase === "calibrating"}
+      isPoseVisible={visible}
       hud={
         phase === "playing" ? (
           <>

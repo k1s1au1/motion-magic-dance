@@ -11,16 +11,17 @@ const COLORS = ["#ff3366", "#33ff77", "#3366ff", "#ffff33", "#ff33ff", "#33ffff"
 const GAME_MS = 60000;
 
 export default function BalloonPop({ onBack }: { onBack: () => void }) {
-  const [phase, setPhase] = useState<"idle" | "playing" | "finished">("idle");
+  const [phase, setPhase] = useState<"idle" | "calibrating" | "playing" | "finished">("idle");
   const [popped, setPopped] = useState(0);
   const [missed, setMissed] = useState(0);
   const [timeLeft, setTimeLeft] = useState(60);
-  const phaseRef = useRef<"idle" | "playing" | "finished">("idle");
+  const phaseRef = useRef<"idle" | "calibrating" | "playing" | "finished">("idle");
   const items = useRef<Balloon[]>([]);
   const particles = useRef<Particle[]>([]);
   const clouds = useRef<{x: number, y: number, s: number, v: number}[]>([]);
   const spawnAt = useRef(0);
   const endAt = useRef(0);
+  const calibrationTimer = useRef(0);
 
   const spawnParticles = (x: number, y: number, color: string) => {
     // Confetti
@@ -43,6 +44,9 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
   };
 
   const onFrame = useCallback(({ lm, ctx, w, h, dt, now }: FrameInfo) => {
+    const isCalibrating = phaseRef.current === "calibrating";
+    const isPlaying = phaseRef.current === "playing";
+
     // 1. CLOUDS PARALLAX BACKGROUND
     if (clouds.current.length === 0) {
       for(let i=0; i<10; i++) clouds.current.push({x: Math.random()*w, y: Math.random()*h*0.4, s: 40 + Math.random()*80, v: 0.2 + Math.random()*0.5});
@@ -57,7 +61,19 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
       ctx.beginPath(); ctx.arc(c.x, c.y, c.s, 0, Math.PI*2); ctx.arc(c.x+c.s*0.6, c.y-c.s*0.2, c.s*0.8, 0, Math.PI*2); ctx.fill();
     });
 
-    if (phaseRef.current === "playing") {
+    // Calibration Logic
+    if (isCalibrating) {
+      if (visible) {
+        calibrationTimer.current += dt;
+        if (calibrationTimer.current > 2.0) {
+          startPlaying();
+        }
+      } else {
+        calibrationTimer.current = 0;
+      }
+    }
+
+    if (isPlaying) {
       setTimeLeft(Math.max(0, Math.ceil((endAt.current - now) / 1000)));
       if (now >= endAt.current) {
         phaseRef.current = "finished"; setPhase("finished"); audio.stopMusic();
@@ -158,20 +174,34 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
     });
   }, []);
 
-  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera(onFrame, "rgba(255, 255, 255, 0.4)");
+  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "rgba(255, 255, 255, 0.4)");
 
   useEffect(() => { return () => { audio.stopMusic(); }; }, []);
 
   const play = async () => {
-    await start(); items.current = []; particles.current = [];
+    calibrationTimer.current = 0;
+    await start();
+    setPhaseBoth("calibrating");
+  };
+
+  const startPlaying = () => {
+    if (phaseRef.current === "playing") return;
+    items.current = []; particles.current = [];
     setPopped(0); setMissed(0); setTimeLeft(60);
     spawnAt.current = performance.now(); endAt.current = performance.now() + GAME_MS;
     phaseRef.current = "playing"; setPhase("playing"); audio.startKidsMusic();
   };
 
+  const setPhaseBoth = (p: typeof phase) => {
+    phaseRef.current = p;
+    setPhase(p);
+  };
+
   return (
     <GameStage
       videoRef={videoRef} canvasRef={canvasRef} title="كرنفال البالونات" emoji="🎈" onBack={onBack}
+      isCalibrating={phase === "calibrating"}
+      isPoseVisible={visible}
       hud={phase === "playing" ? (
         <>
           <KidHud label="فُرقِعت" value={`${popped}`} />

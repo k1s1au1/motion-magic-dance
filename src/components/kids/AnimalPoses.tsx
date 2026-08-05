@@ -50,7 +50,7 @@ const ROUND_MS = 15000;
 const ROUNDS = 6;
 
 export default function AnimalPoses({ onBack }: { onBack: () => void }) {
-  const [phase, setPhase] = useState<"idle" | "playing" | "finished">("idle");
+  const [phase, setPhase] = useState<"idle" | "calibrating" | "playing" | "finished">("idle");
   const [score, setScore] = useState(0);
   const [round, setRound] = useState(1);
   const [target, setTarget] = useState<KidPose | null>(null);
@@ -58,13 +58,14 @@ export default function AnimalPoses({ onBack }: { onBack: () => void }) {
   const [hold, setHold] = useState(0);
   const [win, setWin] = useState(false);
 
-  const phaseRef = useRef<"idle" | "playing" | "finished">("idle");
+  const phaseRef = useRef<"idle" | "calibrating" | "playing" | "finished">("idle");
   const orderRef = useRef<KidPose[]>([]);
   const idxRef = useRef(0);
   const holdRef = useRef(0);
   const roundEnd = useRef(0);
   const leaves = useRef<Leaf[]>([]);
   const forestPhase = useRef(0);
+  const calibrationTimer = useRef(0);
 
   const nextRound = (now: number) => {
     idxRef.current += 1;
@@ -76,8 +77,11 @@ export default function AnimalPoses({ onBack }: { onBack: () => void }) {
     roundEnd.current = now + ROUND_MS;
   };
 
-  const onFrame = useCallback(({ lm, ctx, w, h, now }: FrameInfo) => {
-    // 1. DYNAMIC NATURE BACKGROUND
+  const onFrame = useCallback(({ lm, ctx, w, h, dt, now }: FrameInfo) => {
+    const isCalibrating = phaseRef.current === "calibrating";
+    const isPlaying = phaseRef.current === "playing";
+
+    // ... nature particles ...
     forestPhase.current += 0.01;
     const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
     bgGrad.addColorStop(0, "#2d5a27"); bgGrad.addColorStop(1, "#1a3311");
@@ -111,9 +115,22 @@ export default function AnimalPoses({ onBack }: { onBack: () => void }) {
       ctx.restore();
     });
 
-    if (phaseRef.current !== "playing") return;
-    const pose = orderRef.current[idxRef.current];
-    if (!pose) return;
+    // Calibration Logic
+    if (isCalibrating) {
+      if (visible) {
+        calibrationTimer.current += dt;
+        if (calibrationTimer.current > 2.0) {
+          startPlaying();
+        }
+      } else {
+        calibrationTimer.current = 0;
+      }
+    }
+
+    if (isPlaying) {
+      const pose = orderRef.current[idxRef.current];
+      if (!pose) return;
+      // ...
 
     const q = lm ? Math.max(0, Math.min(1, pose.move.match(lm))) : 0;
     setMatch(q);
@@ -164,21 +181,35 @@ export default function AnimalPoses({ onBack }: { onBack: () => void }) {
 
   }, []);
 
-  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera(onFrame, "rgba(255, 255, 255, 0.4)");
+  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "rgba(255, 255, 255, 0.4)");
 
   useEffect(() => { return () => { audio.stopMusic(); }; }, []);
 
   const play = async () => {
-    await start(); const shuffled = [...KID_POSES].sort(() => Math.random() - 0.5).slice(0, ROUNDS);
+    calibrationTimer.current = 0;
+    await start();
+    setPhaseBoth("calibrating");
+  };
+
+  const startPlaying = () => {
+    if (phaseRef.current === "playing") return;
+    const shuffled = [...KID_POSES].sort(() => Math.random() - 0.5).slice(0, ROUNDS);
     orderRef.current = shuffled; idxRef.current = 0; holdRef.current = 0;
     setScore(0); setHold(0); setWin(false); setRound(1); setTarget(shuffled[0] ?? null);
     roundEnd.current = performance.now() + ROUND_MS;
     phaseRef.current = "playing"; setPhase("playing"); audio.startKidsMusic();
   };
 
+  const setPhaseBoth = (p: typeof phase) => {
+    phaseRef.current = p;
+    setPhase(p);
+  };
+
   return (
     <GameStage
       videoRef={videoRef} canvasRef={canvasRef} title="غابة الحيوانات" emoji="🦒" onBack={onBack}
+      isCalibrating={phase === "calibrating"}
+      isPoseVisible={visible}
       hud={phase === "playing" ? (
         <>
           <KidHud label="النقاط" value={score.toLocaleString("ar-EG")} />
