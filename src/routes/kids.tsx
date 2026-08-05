@@ -5,6 +5,7 @@ const StarCatcher = lazy(() => import("@/components/kids/StarCatcher"));
 const BalloonPop = lazy(() => import("@/components/kids/BalloonPop"));
 const FreezeDance = lazy(() => import("@/components/kids/FreezeDance"));
 const AnimalPoses = lazy(() => import("@/components/kids/AnimalPoses"));
+const SubwayRunner = lazy(() => import("@/components/kids/SubwayRunner"));
 
 export const Route = createFileRoute("/kids")({
   head: () => ({
@@ -12,7 +13,7 @@ export const Route = createFileRoute("/kids")({
       { title: "ألعاب الأطفال الحركية بالكاميرا | رقص المرايا" },
       {
         name: "description",
-        content: "أربع ألعاب حركية للأطفال تعمل بكاميرا الجوال: اصطاد النجوم، فرقعة البالونات، تمثال، وقلّد الحيوان.",
+        content: "خمس ألعاب حركية للأطفال تعمل بكاميرا الجوال: مغامرة المترو، اصطاد النجوم، فرقعة البالونات، تمثال، وقلّد الحيوان.",
       },
       { property: "og:title", content: "ألعاب الأطفال الحركية بالكاميرا" },
       {
@@ -26,13 +27,14 @@ export const Route = createFileRoute("/kids")({
   component: KidsPage,
 });
 
-type GameId = "stars" | "balloons" | "freeze" | "animals";
+type GameId = "stars" | "balloons" | "freeze" | "animals" | "subway";
 
 const GAMES: { id: GameId; name: string; emoji: string; desc: string; cls: string }[] = [
-  { id: "stars", name: "اصطاد النجوم", emoji: "⭐", desc: "المس النجوم النازلة بيديك", cls: "kid-card-1" },
-  { id: "balloons", name: "فرقعة البالونات", emoji: "🎈", desc: "فرقع البالونات الطايرة", cls: "kid-card-2" },
-  { id: "freeze", name: "تمثال!", emoji: "🗿", desc: "ارقص وتجمّد عند الإشارة", cls: "kid-card-3" },
-  { id: "animals", name: "قلّد الحيوان", emoji: "🦒", desc: "سوّ وقفة الحيوان واثبت", cls: "kid-card-4" },
+  { id: "subway", name: "مغامرة المترو", emoji: "🏃", desc: "اركض واقفز لتفادي العقبات", cls: "kid-card-1" },
+  { id: "stars", name: "اصطاد النجوم", emoji: "⭐", desc: "المس النجوم النازلة بيديك", cls: "kid-card-2" },
+  { id: "balloons", name: "فرقعة البالونات", emoji: "🎈", desc: "فرقع البالونات الطايرة", cls: "kid-card-3" },
+  { id: "freeze", name: "تمثال!", emoji: "🗿", desc: "ارقص وتجمّد عند الإشارة", cls: "kid-card-4" },
+  { id: "animals", name: "قلّد الحيوان", emoji: "🦒", desc: "سوّ وقفة الحيوان واثبت", cls: "kid-card-1" },
 ];
 
 function KidsPage() {
@@ -47,6 +49,7 @@ function KidsPage() {
           {game === "balloons" && <BalloonPop onBack={back} />}
           {game === "freeze" && <FreezeDance onBack={back} />}
           {game === "animals" && <AnimalPoses onBack={back} />}
+          {game === "subway" && <SubwayRunner onBack={back} />}
         </Suspense>
       </ClientOnly>
 

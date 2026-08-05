@@ -58,6 +58,22 @@ class AudioService {
     this.playTone(150, "sawtooth", 0.4, 0.2);
     this.playTone(100, "sawtooth", 0.4, 0.2);
   }
+  /** صوت القفز */
+  playJump() {
+    this.playTone(400, "sine", 0.1, 0.2);
+    setTimeout(() => this.playTone(600, "sine", 0.2, 0.2), 50);
+  }
+
+  /** صوت الانحناء */
+  playDuck() {
+    this.playTone(300, "sine", 0.1, 0.2);
+    setTimeout(() => this.playTone(200, "sine", 0.2, 0.2), 50);
+  }
+
+  /** صوت جمع عملة */
+  playCoin() {
+    this.playTone(987.77, "sine", 0.1, 0.1); // B5
+  }
 }
 
 export const audio = new AudioService();
