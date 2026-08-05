@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
 import { POSE_CONNECTIONS, makeRoutine, poseVisible, rating, type Landmarks, type Move } from "@/lib/dance";
 
@@ -258,6 +259,9 @@ export default function DanceGame() {
             <button onClick={start} className="btn-neon mt-5 w-full">
               ابدأ الرقص 💃
             </button>
+            <Link to="/kids" className="btn-kid mt-3 block w-full text-center">
+              ألعاب الصغار 🎪
+            </Link>
           </div>
         )}
         {phase === "loading" && <p className="text-center text-sm text-muted-foreground">جاري تجهيز الكاميرا والتتبع…</p>}
