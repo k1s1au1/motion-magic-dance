@@ -40,12 +40,14 @@ export type Move = {
   match: (lm: Landmarks) => number;
 };
 
+const p = (lm: Landmarks, i: number) => lm[i] as Pt;
+
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 /** score 1 when value >= good, 0 when value <= bad */
 const ramp = (v: number, bad: number, good: number) => clamp01((v - bad) / (good - bad));
 
 function shoulderWidth(lm: Landmarks) {
-  return Math.max(0.08, Math.abs(lm[L.lShoulder].x - lm[L.rShoulder].x));
+  return Math.max(0.08, Math.abs(p(lm, L.lShoulder).x - p(lm, L.rShoulder).x));
 }
 
 export const MOVES: Move[] = [
@@ -55,8 +57,8 @@ export const MOVES: Move[] = [
     emoji: "🙌",
     match: (lm) => {
       const w = shoulderWidth(lm);
-      const a = ramp((lm[L.lShoulder].y - lm[L.lWrist].y) / w, 0, 0.9);
-      const b = ramp((lm[L.rShoulder].y - lm[L.rWrist].y) / w, 0, 0.9);
+      const a = ramp((p(lm, L.lShoulder).y - p(lm, L.lWrist).y) / w, 0, 0.9);
+      const b = ramp((p(lm, L.rShoulder).y - p(lm, L.rWrist).y) / w, 0, 0.9);
       return (a + b) / 2;
     },
   },
@@ -66,8 +68,8 @@ export const MOVES: Move[] = [
     emoji: "🤚",
     match: (lm) => {
       const w = shoulderWidth(lm);
-      const up = ramp((lm[L.rShoulder].y - lm[L.rWrist].y) / w, 0, 0.8);
-      const down = ramp((lm[L.lWrist].y - lm[L.lShoulder].y) / w, -0.1, 0.4);
+      const up = ramp((p(lm, L.rShoulder).y - p(lm, L.rWrist).y) / w, 0, 0.8);
+      const down = ramp((p(lm, L.lWrist).y - p(lm, L.lShoulder).y) / w, -0.1, 0.4);
       return up * 0.7 + down * 0.3;
     },
   },
@@ -77,8 +79,8 @@ export const MOVES: Move[] = [
     emoji: "✋",
     match: (lm) => {
       const w = shoulderWidth(lm);
-      const up = ramp((lm[L.lShoulder].y - lm[L.lWrist].y) / w, 0, 0.8);
-      const down = ramp((lm[L.rWrist].y - lm[L.rShoulder].y) / w, -0.1, 0.4);
+      const up = ramp((p(lm, L.lShoulder).y - p(lm, L.lWrist).y) / w, 0, 0.8);
+      const down = ramp((p(lm, L.rWrist).y - p(lm, L.rShoulder).y) / w, -0.1, 0.4);
       return up * 0.7 + down * 0.3;
     },
   },
@@ -89,12 +91,12 @@ export const MOVES: Move[] = [
     match: (lm) => {
       const w = shoulderWidth(lm);
       const spread =
-        (Math.abs(lm[L.lWrist].x - lm[L.rWrist].x) / w) > 0 ? Math.abs(lm[L.lWrist].x - lm[L.rWrist].x) / w : 0;
+        (Math.abs(p(lm, L.lWrist).x - p(lm, L.rWrist).x) / w) > 0 ? Math.abs(p(lm, L.lWrist).x - p(lm, L.rWrist).x) / w : 0;
       const wide = ramp(spread, 1.4, 2.4);
       const level =
         1 -
         clamp01(
-          (Math.abs(lm[L.lWrist].y - lm[L.lShoulder].y) + Math.abs(lm[L.rWrist].y - lm[L.rShoulder].y)) /
+          (Math.abs(p(lm, L.lWrist).y - p(lm, L.lShoulder).y) + Math.abs(p(lm, L.rWrist).y - p(lm, L.rShoulder).y)) /
             (2 * w * 0.6),
         );
       return wide * 0.6 + level * 0.4;
@@ -106,10 +108,10 @@ export const MOVES: Move[] = [
     emoji: "👏",
     match: (lm) => {
       const w = shoulderWidth(lm);
-      const d = Math.hypot(lm[L.lWrist].x - lm[L.rWrist].x, lm[L.lWrist].y - lm[L.rWrist].y) / w;
+      const d = Math.hypot(p(lm, L.lWrist).x - p(lm, L.rWrist).x, p(lm, L.lWrist).y - p(lm, L.rWrist).y) / w;
       const close = 1 - clamp01((d - 0.15) / 0.6);
       const chest =
-        1 - clamp01(Math.abs((lm[L.lWrist].y + lm[L.rWrist].y) / 2 - (lm[L.lShoulder].y + lm[L.rShoulder].y) / 2) / (w * 0.9));
+        1 - clamp01(Math.abs((p(lm, L.lWrist).y + p(lm, L.rWrist).y) / 2 - (p(lm, L.lShoulder).y + p(lm, L.rShoulder).y) / 2) / (w * 0.9));
       return close * 0.7 + chest * 0.3;
     },
   },
@@ -119,8 +121,8 @@ export const MOVES: Move[] = [
     emoji: "↗️",
     match: (lm) => {
       const w = shoulderWidth(lm);
-      const sc = (lm[L.lShoulder].x + lm[L.rShoulder].x) / 2;
-      const hc = (lm[L.lHip].x + lm[L.rHip].x) / 2;
+      const sc = (p(lm, L.lShoulder).x + p(lm, L.rShoulder).x) / 2;
+      const hc = (p(lm, L.lHip).x + p(lm, L.rHip).x) / 2;
       return ramp((hc - sc) / w, 0.05, 0.45);
     },
   },
@@ -130,8 +132,8 @@ export const MOVES: Move[] = [
     emoji: "↖️",
     match: (lm) => {
       const w = shoulderWidth(lm);
-      const sc = (lm[L.lShoulder].x + lm[L.rShoulder].x) / 2;
-      const hc = (lm[L.lHip].x + lm[L.rHip].x) / 2;
+      const sc = (p(lm, L.lShoulder).x + p(lm, L.rShoulder).x) / 2;
+      const hc = (p(lm, L.lHip).x + p(lm, L.rHip).x) / 2;
       return ramp((sc - hc) / w, 0.05, 0.45);
     },
   },
@@ -141,8 +143,8 @@ export const MOVES: Move[] = [
     emoji: "🏋️",
     match: (lm) => {
       const w = shoulderWidth(lm);
-      const hipY = (lm[L.lHip].y + lm[L.rHip].y) / 2;
-      const kneeY = (lm[L.lKnee].y + lm[L.rKnee].y) / 2;
+      const hipY = (p(lm, L.lHip).y + p(lm, L.rHip).y) / 2;
+      const kneeY = (p(lm, L.lKnee).y + p(lm, L.rKnee).y) / 2;
       return ramp(1 - (kneeY - hipY) / (w * 1.6), 0.15, 0.75);
     },
   },
@@ -161,7 +163,7 @@ export function makeRoutine(length = 12): Move[] {
     let n = Math.floor(Math.random() * MOVES.length);
     if (n === last) n = (n + 1) % MOVES.length;
     last = n;
-    out.push(MOVES[n]);
+    out.push(MOVES[n] as Move);
   }
   return out;
 }
