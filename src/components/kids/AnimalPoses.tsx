@@ -1,7 +1,8 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import GameStage, { KidHud } from "./GameStage";
 import { usePoseCamera, type FrameInfo } from "@/lib/usePoseCamera";
 import { MOVES, type Move } from "@/lib/dance";
+import { audio } from "@/lib/audioUtils";
 
 type KidPose = { move: Move; name: string; emoji: string; hint: string };
 
@@ -70,6 +71,7 @@ export default function AnimalPoses({ onBack }: { onBack: () => void }) {
       if (holdRef.current >= HOLD_MS) {
         setScore((s) => s + 800 + Math.round(q * 400));
         setWin(true);
+        audio.playSuccess();
         ctx.save();
         ctx.font = `bold ${w * 0.12}px system-ui, sans-serif`;
         ctx.textAlign = "center";
@@ -89,6 +91,12 @@ export default function AnimalPoses({ onBack }: { onBack: () => void }) {
 
   const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera(onFrame, "hsl(140 90% 65%)");
 
+  useEffect(() => {
+    return () => {
+      audio.stopMusic();
+    };
+  }, []);
+
   const play = async () => {
     await start();
     const shuffled = [...KID_POSES].sort(() => Math.random() - 0.5).slice(0, ROUNDS);
@@ -103,6 +111,7 @@ export default function AnimalPoses({ onBack }: { onBack: () => void }) {
     roundEnd.current = performance.now() + ROUND_MS;
     phaseRef.current = "playing";
     setPhase("playing");
+    audio.startKidsMusic();
   };
 
   return (

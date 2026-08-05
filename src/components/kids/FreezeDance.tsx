@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import GameStage, { KidHud } from "./GameStage";
 import { usePoseCamera, type FrameInfo } from "@/lib/usePoseCamera";
 import { L, type Landmarks } from "@/lib/dance";
@@ -122,6 +122,12 @@ export default function FreezeDance({ onBack }: { onBack: () => void }) {
   }, []);
 
   const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera(onFrame, "hsl(280 100% 78%)");
+
+  useEffect(() => {
+    return () => {
+      audio.stopMusic();
+    };
+  }, []);
 
   const play = async () => {
     await start();

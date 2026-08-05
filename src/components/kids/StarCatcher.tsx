@@ -1,7 +1,8 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import GameStage, { KidHud } from "./GameStage";
 import { mirrored, usePoseCamera, type FrameInfo } from "@/lib/usePoseCamera";
 import { L } from "@/lib/dance";
+import { audio } from "@/lib/audioUtils";
 
 type Star = { x: number; y: number; vy: number; kind: "star" | "bomb"; r: number };
 
@@ -55,8 +56,10 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
         if (it.kind === "star") {
           setScore((s) => s + 100);
           setCaught((c) => c + 1);
+          audio.playCoin();
         } else {
           setScore((s) => Math.max(0, s - 50));
+          audio.playFail();
         }
         return false;
       }
@@ -104,6 +107,12 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
 
   const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera(onFrame, "hsl(190 100% 70%)");
 
+  useEffect(() => {
+    return () => {
+      audio.stopMusic();
+    };
+  }, []);
+
   const play = async () => {
     await start();
     items.current = [];
@@ -115,6 +124,7 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
     endAt.current = performance.now() + GAME_MS;
     phaseRef.current = "playing";
     setPhase("playing");
+    audio.startKidsMusic();
   };
 
   return (

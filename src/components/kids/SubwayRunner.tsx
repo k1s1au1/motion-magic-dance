@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import GameStage, { KidHud } from "./GameStage";
 import { usePoseCamera, type FrameInfo } from "@/lib/usePoseCamera";
 import { audio } from "@/lib/audioUtils";
@@ -75,6 +75,7 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
         // safe
       } else {
         audio.playFail();
+        audio.stopMusic();
         phaseRef.current = "finished";
         setPhase("finished");
       }
@@ -288,6 +289,12 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
 
   const { videoRef, canvasRef, start, status, error } = usePoseCamera(onFrame, "hsl(45 100% 60%)");
 
+  useEffect(() => {
+    return () => {
+      audio.stopMusic();
+    };
+  }, []);
+
   const play = async () => {
     calibrated.current = false;
     setTimeout(() => calibrated.current = true, 2000);
@@ -298,6 +305,7 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
     coins.current = [];
     phaseRef.current = "playing";
     setPhase("playing");
+    audio.startKidsMusic();
   };
 
   return (
