@@ -90,6 +90,33 @@ class AudioService {
     this.playTone(440, "sine", 0.1, 0.2);
     setTimeout(() => this.playTone(660, "sine", 0.2, 0.2), 50);
   }
+  /** صوت فرقعة بالون */
+  playPop() {
+    this.playTone(600 + Math.random() * 200, "sine", 0.05, 0.3);
+    setTimeout(() => this.playTone(300, "sine", 0.1, 0.1), 20);
+  }
+
+  private musicInterval: any = null;
+
+  /** تشغيل موسيقى للأطفال (إيقاع بسيط) */
+  startKidsMusic() {
+    this.stopMusic();
+    let beat = 0;
+    this.musicInterval = setInterval(() => {
+      const freq = beat % 4 === 0 ? 200 : 150;
+      this.playTone(freq, "sine", 0.1, 0.05);
+      if (beat % 8 === 0) this.playTone(400, "sine", 0.05, 0.03);
+      beat++;
+    }, 400);
+  }
+
+  /** إيقاف أي موسيقى جارية */
+  stopMusic() {
+    if (this.musicInterval) {
+      clearInterval(this.musicInterval);
+      this.musicInterval = null;
+    }
+  }
 }
 
 export const audio = new AudioService();

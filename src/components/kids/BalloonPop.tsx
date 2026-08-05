@@ -1,7 +1,8 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import GameStage, { KidHud } from "./GameStage";
 import { mirrored, usePoseCamera, type FrameInfo } from "@/lib/usePoseCamera";
 import { L } from "@/lib/dance";
+import { audio } from "@/lib/audioUtils";
 
 type Balloon = { x: number; y: number; vy: number; drift: number; emoji: string; r: number };
 
@@ -25,6 +26,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
       if (now >= endAt.current) {
         phaseRef.current = "finished";
         setPhase("finished");
+        audio.stopMusic();
       }
       if (now >= spawnAt.current) {
         spawnAt.current = now + 650 + Math.random() * 450;
@@ -49,6 +51,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
           if (Math.hypot(hnd.x - b.x, (hnd.y - b.y) * (h / w)) < b.r) {
             bursts.current.push({ x: b.x, y: b.y, t: now });
             setPopped((p) => p + 1);
+            audio.playPop();
             return false;
           }
         }
@@ -95,6 +98,12 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
 
   const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera(onFrame, "hsl(320 100% 75%)");
 
+  useEffect(() => {
+    return () => {
+      audio.stopMusic();
+    };
+  }, []);
+
   const play = async () => {
     await start();
     items.current = [];
@@ -106,6 +115,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
     endAt.current = performance.now() + GAME_MS;
     phaseRef.current = "playing";
     setPhase("playing");
+    audio.startKidsMusic();
   };
 
   return (
