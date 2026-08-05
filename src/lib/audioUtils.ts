@@ -74,6 +74,22 @@ class AudioService {
   playCoin() {
     this.playTone(987.77, "sine", 0.1, 0.1); // B5
   }
+  /** صوت الإيقاع (Beat) */
+  playBeat() {
+    this.playTone(150, "sine", 0.05, 0.1);
+  }
+
+  /** صوت التقييم المثالي */
+  playPerfect() {
+    this.playTone(880, "sine", 0.1, 0.2);
+    setTimeout(() => this.playTone(1320, "sine", 0.2, 0.2), 50);
+  }
+
+  /** صوت التقييم الجيد */
+  playGood() {
+    this.playTone(440, "sine", 0.1, 0.2);
+    setTimeout(() => this.playTone(660, "sine", 0.2, 0.2), 50);
+  }
 }
 
 export const audio = new AudioService();

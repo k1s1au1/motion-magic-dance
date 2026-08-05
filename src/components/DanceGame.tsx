@@ -40,42 +40,86 @@ export default function DanceGame() {
     setPhase(p);
   };
 
-  const draw = useCallback((lm: Landmarks | null, quality: number) => {
+  const draw = useCallback((lm: Landmarks | null, quality: number, targetId?: string) => {
     const canvas = canvasRef.current;
-    const video = videoRef.current;
-    if (!canvas || !video) return;
+    if (!canvas) return;
     const w = canvas.width;
     const h = canvas.height;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.clearRect(0, 0, w, h);
+
+    // 1. Draw Ghost / Silhouette hint
+    if (phaseRef.current === "playing" && targetId) {
+      ctx.save();
+      ctx.globalAlpha = 0.25;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+      ctx.lineWidth = w * 0.03;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+
+      // Simple representative silhouettes based on move ID
+      ctx.beginPath();
+      const cx = w / 2, cy = h * 0.5, sw = w * 0.15;
+      // Head
+      ctx.arc(cx, cy - h * 0.2, w * 0.04, 0, Math.PI * 2);
+      // Body
+      ctx.moveTo(cx, cy - h * 0.15); ctx.lineTo(cx, cy + h * 0.1);
+      // Arms logic for silhouette
+      if (targetId === "both-up") {
+        ctx.moveTo(cx - sw, cy - h * 0.1); ctx.lineTo(cx - sw, cy - h * 0.3);
+        ctx.moveTo(cx + sw, cy - h * 0.1); ctx.lineTo(cx + sw, cy - h * 0.3);
+      } else if (targetId === "t-pose") {
+        ctx.moveTo(cx - sw, cy - h * 0.1); ctx.lineTo(cx - sw * 2.5, cy - h * 0.1);
+        ctx.moveTo(cx + sw, cy - h * 0.1); ctx.lineTo(cx + sw * 2.5, cy - h * 0.1);
+      } else if (targetId === "right-up") {
+        ctx.moveTo(cx + sw, cy - h * 0.1); ctx.lineTo(cx + sw, cy - h * 0.3);
+        ctx.moveTo(cx - sw, cy - h * 0.1); ctx.lineTo(cx - sw, cy + h * 0.05);
+      } else if (targetId === "left-up") {
+        ctx.moveTo(cx - sw, cy - h * 0.1); ctx.lineTo(cx - sw, cy - h * 0.3);
+        ctx.moveTo(cx + sw, cy - h * 0.1); ctx.lineTo(cx + sw, cy + h * 0.05);
+      } else if (targetId === "clap") {
+        ctx.moveTo(cx - sw, cy - h * 0.1); ctx.lineTo(cx, cy - h * 0.05);
+        ctx.lineTo(cx + sw, cy - h * 0.1);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
     if (!lm) return;
 
+    // 2. Draw Player Skeleton with dynamic feedback
     const hue = 140 + quality * 60;
-    const color = quality > 0.65 ? `hsl(${hue} 100% 60%)` : quality > 0.35 ? "hsl(45 100% 60%)" : "hsl(330 100% 65%)";
+    const color = quality > 0.65 ? `oklch(0.75 0.2 150)` : quality > 0.35 ? "oklch(0.85 0.2 90)" : "oklch(0.7 0.2 350)";
+
     ctx.save();
     ctx.translate(w, 0);
     ctx.scale(-1, 1);
+
+    // Glow effect
     ctx.shadowColor = color;
-    ctx.shadowBlur = 18;
+    ctx.shadowBlur = 15 + quality * 20;
     ctx.strokeStyle = color;
-    ctx.lineWidth = Math.max(4, w * 0.012);
+    ctx.lineWidth = Math.max(6, w * 0.015);
     ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
     for (const [a, b] of POSE_CONNECTIONS) {
-      const pa = lm[a];
-      const pb = lm[b];
+      const pa = lm[a], pb = lm[b];
       if (!pa || !pb) continue;
       ctx.beginPath();
       ctx.moveTo(pa.x * w, pa.y * h);
       ctx.lineTo(pb.x * w, pb.y * h);
       ctx.stroke();
     }
+
+    // Draw joints
     ctx.fillStyle = color;
     for (const i of [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]) {
       const pt = lm[i];
       if (!pt) continue;
       ctx.beginPath();
-      ctx.arc(pt.x * w, pt.y * h, i === 0 ? w * 0.035 : w * 0.014, 0, Math.PI * 2);
+      ctx.arc(pt.x * w, pt.y * h, i === 0 ? w * 0.04 : w * 0.018, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
@@ -94,30 +138,42 @@ export default function DanceGame() {
     }
 
     let quality = 0;
+    const now = performance.now();
+
     if (video.currentTime !== lastVideoTime.current) {
       lastVideoTime.current = video.currentTime;
-      const res = landmarker.detectForVideo(video, performance.now());
+      const res = landmarker.detectForVideo(video, now);
       const lm = res.landmarks?.[0] as Landmarks | undefined;
+
+      const move = routineRef.current[indexRef.current];
       if (poseVisible(lm)) {
-        const move = routineRef.current[indexRef.current];
         quality = move ? Math.max(0, Math.min(1, move.match(lm))) : 0;
         setDetected(true);
         setLive(quality);
         if (phaseRef.current === "playing" && quality > bestRef.current) bestRef.current = quality;
-        draw(lm, quality);
+        draw(lm, quality, move?.id);
       } else {
         setDetected(false);
         setLive(0);
-        draw(null, 0);
+        draw(null, 0, move?.id);
       }
     }
 
     if (phaseRef.current === "playing") {
-      const elapsed = performance.now() - moveStart.current;
+      const elapsed = now - moveStart.current;
       setProgress(Math.min(1, elapsed / MOVE_MS));
+
+      // Rhythmic Beat
+      if (Math.floor(elapsed / 1000) !== Math.floor((elapsed - 16.7) / 1000)) {
+        audio.playBeat();
+      }
+
       if (elapsed >= MOVE_MS) {
         const r = rating(bestRef.current);
-        setFlash({ label: r.label, cls: r.cls, key: performance.now() });
+        if (r.points >= 1000) audio.playPerfect();
+        else if (r.points > 0) audio.playGood();
+
+        setFlash({ label: r.label, cls: r.cls, key: now });
         setCombo((c) => {
           const nc = r.points > 0 ? c + 1 : 0;
           setBestCombo((b) => Math.max(b, nc));
@@ -126,7 +182,7 @@ export default function DanceGame() {
         });
         bestRef.current = 0;
         indexRef.current += 1;
-        moveStart.current = performance.now();
+        moveStart.current = now;
         const routine = routineRef.current;
         if (indexRef.current >= routine.length) {
           setPhaseBoth("finished");
@@ -219,23 +275,31 @@ export default function DanceGame() {
 
         {phase === "playing" && current && (
           <div className="relative mt-2 px-5 text-center">
-            <div className="move-chip">
-              <span className="text-3xl">{current.emoji}</span>
-              <span className="text-lg font-bold">{current.name}</span>
+            <div className={`move-chip transition-transform duration-200 ${Math.floor(progress * 10) % 2 === 0 ? "scale-105" : "scale-100"}`}>
+              <span className="text-4xl">{current.emoji}</span>
+              <span className="text-xl font-extrabold">{current.name}</span>
             </div>
-            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
-              <div className="beat-bar h-full" style={{ width: `${(1 - progress) * 100}%` }} />
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="h-3 w-full overflow-hidden rounded-full bg-white/10 p-0.5">
+                <div className="beat-bar h-full rounded-full" style={{ width: `${(1 - progress) * 100}%` }} />
+              </div>
+              <div className="h-3 w-full overflow-hidden rounded-full bg-white/10 p-0.5">
+                <div className="match-bar h-full rounded-full shadow-[0_0_10px_currentColor]"
+                     style={{ width: `${live * 100}%`, color: live > 0.6 ? "var(--neon-lime)" : "var(--neon-pink)" }} />
+              </div>
             </div>
-            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
-              <div className="match-bar h-full" style={{ width: `${live * 100}%` }} />
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {detected ? `تطابق الحركة ${Math.round(live * 100)}%` : "ابعد شوي عن الجوال عشان يبين جسمك كامل"}
+
+            <p className="mt-2 text-[10px] font-bold tracking-widest uppercase opacity-60">
+              {detected ? "تابع الحركة..." : "ابعد قليلاً عن الكاميرا"}
             </p>
+
             {next && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                التالي: {next.emoji} {next.name}
-              </p>
+              <div className="mt-2 inline-flex items-center gap-2 rounded-lg bg-black/40 px-3 py-1 text-[10px] text-muted-foreground">
+                <span>التالي:</span>
+                <span>{next.emoji}</span>
+                <span className="font-bold">{next.name}</span>
+              </div>
             )}
           </div>
         )}
