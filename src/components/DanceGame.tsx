@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
 import { POSE_CONNECTIONS, makeRoutine, poseVisible, rating, type Landmarks, type Move } from "@/lib/dance";
 
