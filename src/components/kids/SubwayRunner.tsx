@@ -150,6 +150,13 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, w, h);
 
+    // Jump/Duck Feedback Tint
+    if (playerState.current === "jumping") {
+      ctx.fillStyle = "rgba(251, 191, 36, 0.08)"; ctx.fillRect(0,0,w,h);
+    } else if (playerState.current === "ducking") {
+      ctx.fillStyle = "rgba(56, 189, 248, 0.08)"; ctx.fillRect(0,0,w,h);
+    }
+
     // Perspective Walls
     ctx.fillStyle = "#111122";
     ctx.beginPath();
@@ -157,9 +164,22 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
     ctx.lineTo(w, h * 0.7); ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.lineTo(0, h * 0.7);
     ctx.closePath(); ctx.fill();
 
+    // Floor Spotlight (Lane Indication)
+    if (isPlaying || isCounting) {
+      const sx = centerX + (playerLane.current - 1) * (roadW / 4);
+      const sy = h * 0.92;
+      const spotGrad = ctx.createRadialGradient(sx, sy, 0, sx, sy, w * 0.25);
+      spotGrad.addColorStop(0, "rgba(255, 255, 255, 0.2)");
+      spotGrad.addColorStop(1, "transparent");
+      ctx.fillStyle = spotGrad;
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, w * 0.3, w * 0.08, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     // Side Neon Lines
-    ctx.strokeStyle = "rgba(100, 100, 255, 0.2)";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(100, 100, 255, 0.3)";
+    ctx.lineWidth = 3;
     for (let i = 0; i < 4; i++) {
         const xOffset = (i - 1.5) * (roadW / 2);
         ctx.beginPath();
@@ -215,58 +235,91 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
       if (o.z < 0.2 || o.z > 10) return;
       const x = getX(o.lane, o.z);
       const y = getY(o.z);
-      const size = (w * 0.18) / o.z;
+      const size = (w * 0.2) / o.z;
+
+      ctx.save();
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "#fff"; // High contrast outline
 
       if (o.type === "barrier-low") {
-        ctx.fillStyle = "#ef4444"; ctx.fillRect(x - size, y - size, size * 2, size);
-        ctx.fillStyle = "#fff"; ctx.fillRect(x - size, y - size * 0.6, size * 2, size * 0.2);
+        ctx.fillStyle = "#ff0000"; // Electric Red
+        ctx.fillRect(x - size, y - size, size * 2, size);
+        ctx.strokeRect(x - size, y - size, size * 2, size);
+        // Warning stripes
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(x - size, y - size * 0.7, size * 2, size * 0.2);
       } else {
-        const trainH = size * 3.5;
-        ctx.fillStyle = "#1e293b"; ctx.fillRect(x - size, y - trainH, size * 2, trainH);
-        ctx.fillStyle = "#38bdf8"; ctx.fillRect(x - size * 0.7, y - trainH * 0.8, size * 1.4, size * 0.5);
-        ctx.fillStyle = "#fef08a"; ctx.beginPath();
-        ctx.arc(x - size * 0.6, y - size * 0.4, size * 0.2, 0, Math.PI * 2);
-        ctx.arc(x + size * 0.6, y - size * 0.4, size * 0.2, 0, Math.PI * 2); ctx.fill();
+        const trainH = size * 3.8;
+        const grad = ctx.createLinearGradient(x - size, 0, x + size, 0);
+        grad.addColorStop(0, "#00c3ff"); // Electric Blue
+        grad.addColorStop(1, "#ffff1c"); // Yellow highlights
+        ctx.fillStyle = grad;
+        ctx.fillRect(x - size, y - trainH, size * 2, trainH);
+        ctx.strokeRect(x - size, y - trainH, size * 2, trainH);
+
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(x - size * 0.8, y - trainH * 0.8, size * 1.6, size * 0.6); // Big window
+
+        // Front Lights (Glow)
+        ctx.shadowBlur = 30;
+        ctx.shadowColor = "yellow";
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(x - size * 0.6, y - size * 0.5, size * 0.25, 0, Math.PI * 2);
+        ctx.arc(x + size * 0.6, y - size * 0.5, size * 0.25, 0, Math.PI * 2); ctx.fill();
       }
+      ctx.restore();
     });
 
     // 4. DRAW PLAYER AVATAR (Neon Skeleton)
-    const px = centerX + (playerLane.current - 1) * (roadW / 5);
+    const px = centerX + (playerLane.current - 1) * (roadW / 4.5);
     const py = h * 0.88;
 
-    // Shadow
-    ctx.fillStyle = "rgba(0,0,0,0.4)";
-    ctx.beginPath(); ctx.ellipse(px, h * 0.94, w * 0.12, w * 0.04, 0, 0, Math.PI * 2); ctx.fill();
+    // Shadow / Aura Background for Avatar
+    ctx.save();
+    ctx.shadowBlur = 40;
+    ctx.shadowColor = playerState.current === "jumping" ? "#fbbf24" : playerState.current === "ducking" ? "#38bdf8" : "rgba(255,255,255,0.2)";
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.beginPath(); ctx.ellipse(px, h * 0.94, w * 0.15, w * 0.05, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
 
     if (lm) {
       // Draw a mini neon skeleton that mirrors the user
-      const avatarScale = w * 0.25;
+      const avatarScale = w * 0.35;
       const avatarX = px;
-      const avatarY = py - (playerState.current === "jumping" ? h * 0.1 : 0);
+      const avatarY = py - (playerState.current === "jumping" ? h * 0.25 : 0); // EXAGGERATED JUMP
 
-      const neonColor = playerState.current === "jumping" ? "#fbbf24" : playerState.current === "ducking" ? "#38bdf8" : "#a855f7";
+      const neonColor = playerState.current === "jumping" ? "#fbbf24" : playerState.current === "ducking" ? "#38bdf8" : "#fff";
+
+      // Draw Status Icon
+      if (playerState.current !== "normal") {
+        ctx.font = `bold ${w * 0.12}px system-ui`;
+        ctx.fillStyle = neonColor;
+        ctx.fillText(playerState.current === "jumping" ? "⬆️" : "⬇️", px + w * 0.2, avatarY - h * 0.1);
+      }
+
       ctx.save();
       ctx.translate(avatarX, avatarY);
       ctx.strokeStyle = neonColor;
       ctx.shadowColor = neonColor;
-      ctx.shadowBlur = 10;
-      ctx.lineWidth = 4;
+      ctx.shadowBlur = 25;
+      ctx.lineWidth = 10; // THICKER LINES
       ctx.lineCap = "round";
 
       // Draw simplified skeleton based on lm
       const p_v = (i: number) => ({ x: (0.5 - lm[i].x) * avatarScale, y: (lm[i].y - baselineY.current) * avatarScale });
 
-      const connections: [number, number][] = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24]];
+      const connections: [number, number][] = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23,25], [24,26]];
       connections.forEach(([a, b]) => {
         const p1 = p_v(a), p2 = p_v(b);
         ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
       });
       // Head
       const head = p_v(0);
-      ctx.beginPath(); ctx.arc(head.x, head.y, avatarScale * 0.1, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(head.x, head.y, avatarScale * 0.15, 0, Math.PI * 2); ctx.stroke();
       ctx.restore();
     } else {
-      ctx.font = `${w * 0.2}px system-ui`; ctx.textAlign = "center"; ctx.fillText("🏃", px, py);
+      ctx.font = `${w * 0.25}px system-ui`; ctx.textAlign = "center"; ctx.fillText("🏃", px, py);
     }
 
     // Feedback Flash
