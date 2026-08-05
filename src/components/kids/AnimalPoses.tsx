@@ -11,7 +11,7 @@ type KidPose = {
   hint: string;
   silhouette?: { [key: number]: { x: number, y: number } }
 };
-type Leaf = { x: number; y: number; r: number; vx: number; vy: number; rotation: number; dr: number; color: string };
+type Leaf = { x: number; y: number; r: number; vx: number; vy: number; rotation: number; dr: number; color: string; z: number };
 
 const KID_POSES: KidPose[] = [
   { id: "both-up", name: "الزرافة", emoji: "🦒", hint: "ارفع يديك فوق راسك مثل رقبة الزرافة",
@@ -41,12 +41,12 @@ const KID_POSES: KidPose[] = [
 ]
   .map((k) => {
     const move = MOVES.find((m) => m.id === k.id);
-    return move ? { move, name: k.name, emoji: k.emoji, hint: k.hint } : null;
+    return move ? { move, name: k.name, emoji: k.emoji, hint: k.hint, silhouette: k.silhouette } : null;
   })
   .filter(Boolean) as KidPose[];
 
-const HOLD_MS = 900;
-const ROUND_MS = 12000;
+const HOLD_MS = 1000;
+const ROUND_MS = 15000;
 const ROUNDS = 6;
 
 export default function AnimalPoses({ onBack }: { onBack: () => void }) {
@@ -64,41 +64,51 @@ export default function AnimalPoses({ onBack }: { onBack: () => void }) {
   const holdRef = useRef(0);
   const roundEnd = useRef(0);
   const leaves = useRef<Leaf[]>([]);
+  const forestPhase = useRef(0);
 
   const nextRound = (now: number) => {
     idxRef.current += 1;
-    holdRef.current = 0;
-    setHold(0);
-    setWin(false);
+    holdRef.current = 0; setHold(0); setWin(false);
     if (idxRef.current >= orderRef.current.length) {
-      phaseRef.current = "finished";
-      setPhase("finished");
-      setTarget(null);
-      return;
+      phaseRef.current = "finished"; setPhase("finished"); setTarget(null); return;
     }
-    setRound(idxRef.current + 1);
-    setTarget(orderRef.current[idxRef.current] ?? null);
+    setRound(idxRef.current + 1); setTarget(orderRef.current[idxRef.current] ?? null);
     roundEnd.current = now + ROUND_MS;
   };
 
   const onFrame = useCallback(({ lm, ctx, w, h, now }: FrameInfo) => {
-    // Nature Particles Update
-    if (leaves.current.length < 15) {
+    // 1. DYNAMIC NATURE BACKGROUND
+    forestPhase.current += 0.01;
+    const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
+    bgGrad.addColorStop(0, "#2d5a27"); bgGrad.addColorStop(1, "#1a3311");
+    ctx.fillStyle = bgGrad; ctx.fillRect(0,0,w,h);
+
+    // Volumetric Sunbeams
+    ctx.save(); ctx.globalCompositeOperation = "screen";
+    for(let i=0; i<3; i++) {
+        const lx = w * 0.2 + Math.sin(forestPhase.current * 0.5 + i) * w * 0.3;
+        const beamGrad = ctx.createLinearGradient(lx, 0, lx + 200, h);
+        beamGrad.addColorStop(0, "rgba(255, 255, 200, 0.2)"); beamGrad.addColorStop(1, "transparent");
+        ctx.fillStyle = beamGrad; ctx.beginPath();
+        ctx.moveTo(lx, 0); ctx.lineTo(lx+100, 0); ctx.lineTo(lx+300, h); ctx.lineTo(lx+100, h); ctx.fill();
+    }
+    ctx.restore();
+
+    // Leaf Particles
+    if (leaves.current.length < 25) {
       leaves.current.push({
-        x: Math.random() * w, y: -20,
-        r: 10 + Math.random() * 15,
-        vx: (Math.random() - 0.5) * 2,
-        vy: 1 + Math.random() * 2,
-        rotation: Math.random() * Math.PI * 2,
-        dr: (Math.random() - 0.5) * 0.1,
-        color: `hsl(${20 + Math.random() * 100}, 70%, 40%)`
+        x: Math.random() * w, y: -50, z: Math.random(),
+        r: 8 + Math.random() * 20, vx: (Math.random() - 0.5) * 3, vy: 1 + Math.random() * 3,
+        rotation: Math.random() * Math.PI * 2, dr: (Math.random() - 0.5) * 0.15,
+        color: `hsl(${30 + Math.random() * 90}, 70%, ${30 + Math.random()*20}%)`
       });
     }
     leaves.current.forEach(l => {
-      l.x += l.vx + Math.sin(now * 0.001) * 0.5;
-      l.y += l.vy;
-      l.rotation += l.dr;
-      if (l.y > h + 20) l.y = -20;
+      l.x += l.vx + Math.sin(now * 0.001 + l.z) * 1.5; l.y += l.vy; l.rotation += l.dr;
+      if (l.y > h + 50) { l.y = -50; l.x = Math.random()*w; }
+      ctx.save(); ctx.translate(l.x, l.y); ctx.rotate(l.rotation); ctx.globalAlpha = 0.6 + l.z*0.4;
+      ctx.fillStyle = l.color; ctx.beginPath(); ctx.ellipse(0, 0, l.r, l.r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
     });
 
     if (phaseRef.current !== "playing") return;
@@ -108,164 +118,101 @@ export default function AnimalPoses({ onBack }: { onBack: () => void }) {
     const q = lm ? Math.max(0, Math.min(1, pose.move.match(lm))) : 0;
     setMatch(q);
 
-    if (q > 0.62) {
-      holdRef.current += 16.7;
-      setHold(Math.min(1, holdRef.current / HOLD_MS));
+    if (q > 0.65) {
+      holdRef.current += 16.7; setHold(Math.min(1, holdRef.current / HOLD_MS));
       if (holdRef.current >= HOLD_MS) {
-        setScore((s) => s + 800 + Math.round(q * 400));
-        setWin(true);
-        audio.playSuccess();
-        ctx.save();
-        ctx.font = `bold ${w * 0.12}px system-ui, sans-serif`;
-        ctx.textAlign = "center";
-        ctx.fillStyle = "hsl(140 90% 60%)";
-        ctx.fillText("ممتاز! 🌟", w / 2, h * 0.5);
-        ctx.restore();
-        nextRound(now);
-        return;
+        setScore((s) => s + 1000 + Math.round(q * 500));
+        setWin(true); audio.playSuccess();
+        nextRound(now); return;
       }
     } else {
-      holdRef.current = Math.max(0, holdRef.current - 8);
-      setHold(Math.min(1, holdRef.current / HOLD_MS));
+      holdRef.current = Math.max(0, holdRef.current - 10); setHold(Math.min(1, holdRef.current / HOLD_MS));
     }
 
     if (now >= roundEnd.current) nextRound(now);
 
-    // 3. Drawing
-    // Draw Nature Particles
-    leaves.current.forEach(l => {
-      ctx.save();
-      ctx.translate(l.x, l.y);
-      ctx.rotate(l.rotation);
-      ctx.fillStyle = l.color;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, l.r, l.r * 0.6, 0, 0, Math.PI * 2);
-      ctx.fill();
-      // Leaf vein
-      ctx.strokeStyle = "rgba(0,0,0,0.1)";
-      ctx.beginPath(); ctx.moveTo(-l.r, 0); ctx.lineTo(l.r, 0); ctx.stroke();
-      ctx.restore();
-    });
-
-    // Silhouette (Ghost Skeleton)
+    // 2. EXTREME SILHOUETTE & SKELETON
     if (pose && pose.silhouette) {
-      ctx.save();
-      ctx.globalAlpha = 0.35;
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
-      ctx.setLineDash([8, 4]);
-      ctx.lineWidth = 10;
-      ctx.lineCap = "round";
-
+      ctx.save(); ctx.globalAlpha = 0.4 + Math.sin(now*0.005)*0.1;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.9)"; ctx.setLineDash([15, 10]);
+      ctx.lineWidth = 14; ctx.lineCap = "round";
       const sil = pose.silhouette;
       const conn: [number, number][] = [[11,12], [11,13], [13,15], [12,14], [14,16], [11,23], [12,24], [23,24]];
       conn.forEach(([a, b]) => {
-        if (sil[a] && sil[b]) {
-          ctx.beginPath();
-          ctx.moveTo(sil[a].x * w, sil[a].y * h);
-          ctx.lineTo(sil[b].x * w, sil[b].y * h);
-          ctx.stroke();
-        }
+        if (sil[a] && sil[b]) { ctx.beginPath(); ctx.moveTo(sil[a].x * w, sil[a].y * h); ctx.lineTo(sil[b].x * w, sil[b].y * h); ctx.stroke(); }
       });
       ctx.restore();
     }
 
-    // Actual Skeleton with Glow if matching
     if (lm) {
       ctx.save();
-      const glow = match > 0.6 ? "0 0 25px hsl(140 90% 60%)" : "none";
-      ctx.strokeStyle = match > 0.6 ? "hsl(140 90% 60%)" : "white";
-      ctx.lineWidth = 10;
-      ctx.lineCap = "round";
+      const isMatching = q > 0.6;
+      const glowColor = isMatching ? "#4ade80" : "#ffffff";
+      ctx.strokeStyle = glowColor; ctx.shadowColor = glowColor; ctx.shadowBlur = isMatching ? 40 : 10;
+      ctx.lineWidth = 16; ctx.lineCap = "round";
       const conn: [number, number][] = [[11,12], [11,13], [13,15], [12,14], [14,16], [11,23], [12,24], [23,24], [23,25], [24,26]];
       conn.forEach(([a, b]) => {
-        if (lm[a] && lm[b]) {
-          ctx.beginPath();
-          ctx.moveTo(lm[a].x * w, lm[a].y * h);
-          ctx.lineTo(lm[b].x * w, lm[b].y * h);
-          ctx.stroke();
-        }
+        if (lm[a] && lm[b]) { ctx.beginPath(); ctx.moveTo(lm[a].x * w, lm[a].y * h); ctx.lineTo(lm[b].x * w, lm[b].y * h); ctx.stroke(); }
       });
       ctx.restore();
     }
+
+    // Depth of Field Blur (Simple Vignette)
+    const blurGrad = ctx.createRadialGradient(w/2, h/2, w*0.4, w/2, h/2, w*0.8);
+    blurGrad.addColorStop(0, "transparent"); blurGrad.addColorStop(1, "rgba(0,0,0,0.3)");
+    ctx.fillStyle = blurGrad; ctx.fillRect(0,0,w,h);
+
   }, []);
 
-  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera(onFrame, "hsl(140 90% 65%)");
+  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera(onFrame, "rgba(255, 255, 255, 0.4)");
 
-  useEffect(() => {
-    return () => {
-      audio.stopMusic();
-    };
-  }, []);
+  useEffect(() => { return () => { audio.stopMusic(); }; }, []);
 
   const play = async () => {
-    await start();
-    const shuffled = [...KID_POSES].sort(() => Math.random() - 0.5).slice(0, ROUNDS);
-    orderRef.current = shuffled;
-    idxRef.current = 0;
-    holdRef.current = 0;
-    setScore(0);
-    setHold(0);
-    setWin(false);
-    setRound(1);
-    setTarget(shuffled[0] ?? null);
+    await start(); const shuffled = [...KID_POSES].sort(() => Math.random() - 0.5).slice(0, ROUNDS);
+    orderRef.current = shuffled; idxRef.current = 0; holdRef.current = 0;
+    setScore(0); setHold(0); setWin(false); setRound(1); setTarget(shuffled[0] ?? null);
     roundEnd.current = performance.now() + ROUND_MS;
-    phaseRef.current = "playing";
-    setPhase("playing");
-    audio.startKidsMusic();
+    phaseRef.current = "playing"; setPhase("playing"); audio.startKidsMusic();
   };
 
   return (
     <GameStage
-      videoRef={videoRef}
-      canvasRef={canvasRef}
-      title="قلّد الحيوان"
-      emoji="🦒"
-      onBack={onBack}
-      hud={
-        phase === "playing" ? (
-          <>
-            <KidHud label="النقاط" value={score.toLocaleString("ar-EG")} />
-            <KidHud label="الجولة" value={`${round}/${orderRef.current.length || ROUNDS}`} />
-          </>
-        ) : null
-      }
-      banner={
-        phase === "playing" && target ? (
-          <div className="relative mt-3 px-5 text-center">
-            <div className={`kid-banner kid-banner-dance ${win ? "kid-win" : ""}`}>
-              <span className="text-3xl">{target.emoji}</span> {target.name}
-            </div>
-            <p className="mt-2 text-sm font-bold text-foreground">{target.hint}</p>
-            <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-white/15">
-              <div className="kid-bar h-full" style={{ width: `${match * 100}%` }} />
-            </div>
-            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/15">
-              <div className="kid-bar-hold h-full" style={{ width: `${hold * 100}%` }} />
-            </div>
+      videoRef={videoRef} canvasRef={canvasRef} title="غابة الحيوانات" emoji="🦒" onBack={onBack}
+      hud={phase === "playing" ? (
+        <>
+          <KidHud label="النقاط" value={score.toLocaleString("ar-EG")} />
+          <KidHud label="الجولة" value={`${round}/${ROUNDS}`} />
+        </>
+      ) : null}
+      banner={phase === "playing" && target ? (
+        <div className="relative mt-3 px-5 text-center">
+          <div className={`kid-banner bg-white/20 backdrop-blur-md ${win ? "kid-win" : ""}`}>
+            <span className="text-4xl">{target.emoji}</span> <span className="text-white drop-shadow-lg">{target.name}</span>
           </div>
-        ) : null
-      }
+          <div className="mt-3 h-4 w-full overflow-hidden rounded-full bg-black/30 border border-white/20">
+            <div className="h-full bg-gradient-to-r from-green-400 to-emerald-600 transition-all shadow-[0_0_15px_rgba(74,222,128,0.5)]" style={{ width: `${match * 100}%` }} />
+          </div>
+          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-black/20">
+            <div className="h-full bg-white transition-all shadow-white shadow-sm" style={{ width: `${hold * 100}%` }} />
+          </div>
+        </div>
+      ) : null}
     >
       {phase === "idle" && (
         <div className="text-center">
-          <h2 className="kid-title text-3xl">قلّد الحيوان 🦒</h2>
-          <p className="mt-2 text-sm text-muted-foreground">سوّ نفس وقفة الحيوان واثبت شوي… والكاميرا تشوفك!</p>
-          {error && <p className="mt-3 text-sm text-[var(--kid-red)]">{error}</p>}
-          <button onClick={play} disabled={status === "loading"} className="btn-kid mt-5 w-full">
-            {status === "loading" ? "جاري التجهيز…" : "يلا نبدأ!"}
+          <h2 className="kid-title text-3xl font-black">غابة الحيوانات 🦒🌴</h2>
+          <p className="mt-2 text-sm text-muted-foreground">قلّد الحيوان واثبت في مكانك داخل الغابة السحرية!</p>
+          <button onClick={play} disabled={status === "loading"} className="btn-kid mt-5 w-full shadow-2xl">
+            {status === "loading" ? "استدعاء الحيوانات…" : "دخول الغابة! 🍃"}
           </button>
         </div>
       )}
-      {phase === "playing" && (
-        <p className="text-center text-xs text-muted-foreground">{visible ? "ثبّت على الوقفة شوي 👌" : "ابعد شوي عشان يبين جسمك كامل 🙂"}</p>
-      )}
       {phase === "finished" && (
         <div className="text-center">
-          <h2 className="kid-title text-3xl">بطل! 🎉</h2>
-          <p className="mt-2 text-lg font-bold">{score.toLocaleString("ar-EG")} نقطة</p>
-          <button onClick={play} className="btn-kid mt-5 w-full">
-            العب مرة ثانية 🔁
-          </button>
+          <h2 className="kid-title text-4xl">ملك الغابة! 🦁👑</h2>
+          <p className="mt-2 text-2xl font-black text-green-400">{score.toLocaleString("ar-EG")} نقطة</p>
+          <button onClick={play} className="btn-kid mt-5 w-full">تحدي جديد 🔁</button>
         </div>
       )}
     </GameStage>
