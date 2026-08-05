@@ -243,3 +243,132 @@
   animation: pop-in 1s ease-out forwards;
   text-shadow: 0 0 24px currentColor;
 }
+
+/* ---- Kids games design tokens & components ---- */
+:root {
+  --kid-purple: oklch(0.72 0.19 300);
+  --kid-blue: oklch(0.78 0.16 230);
+  --kid-lime: oklch(0.88 0.2 140);
+  --kid-yellow: oklch(0.88 0.17 90);
+  --kid-red: oklch(0.72 0.2 25);
+}
+
+.kid-stage {
+  background:
+    radial-gradient(85% 55% at 15% 0%, oklch(0.4 0.17 300 / 0.6), transparent 70%),
+    radial-gradient(85% 55% at 95% 15%, oklch(0.42 0.15 200 / 0.55), transparent 70%),
+    radial-gradient(90% 50% at 50% 100%, oklch(0.4 0.16 140 / 0.35), transparent 70%),
+    var(--background);
+}
+
+.kid-title {
+  font-weight: 900;
+  background: linear-gradient(100deg, var(--kid-yellow), var(--kid-lime), var(--kid-blue));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 16px oklch(0.85 0.18 120 / 0.35));
+}
+
+.kid-pill {
+  border-radius: 999px;
+  border: 1px solid oklch(1 0 0 / 0.18);
+  background: oklch(0.18 0.06 300 / 0.6);
+  backdrop-filter: blur(8px);
+  padding: 0.45rem 0.9rem;
+}
+
+.kid-hud {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-radius: var(--radius-2xl);
+  border: 2px solid oklch(1 0 0 / 0.18);
+  background: oklch(0.18 0.06 300 / 0.6);
+  backdrop-filter: blur(10px);
+  padding: 0.4rem 1rem;
+}
+.kid-hud-label {
+  font-size: 0.7rem;
+  color: var(--muted-foreground);
+}
+.kid-hud-value {
+  font-size: 1.5rem;
+  font-weight: 900;
+  line-height: 1.1;
+  color: var(--kid-yellow);
+}
+
+.kid-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  padding: 0.7rem 1.4rem;
+  font-size: 1.1rem;
+  font-weight: 900;
+  color: oklch(0.16 0.05 300);
+  box-shadow: 0 10px 32px oklch(0 0 0 / 0.35);
+}
+.kid-banner-dance {
+  background: linear-gradient(100deg, var(--kid-yellow), var(--kid-lime));
+}
+.kid-banner-freeze {
+  background: linear-gradient(100deg, var(--kid-blue), oklch(0.95 0.03 220));
+}
+.kid-win {
+  animation: kid-pop 0.5s ease-out;
+}
+@keyframes kid-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+.kid-bar {
+  background: linear-gradient(90deg, var(--kid-blue), var(--kid-lime));
+  transition: width 0.12s ease-out;
+}
+.kid-bar-hold {
+  background: linear-gradient(90deg, var(--kid-yellow), var(--kid-red));
+  transition: width 0.12s linear;
+}
+
+.btn-kid {
+  border-radius: 999px;
+  padding: 1rem 1.5rem;
+  font-size: 1.1rem;
+  font-weight: 900;
+  color: oklch(0.16 0.05 300);
+  background: linear-gradient(100deg, var(--kid-yellow), var(--kid-lime), var(--kid-blue));
+  box-shadow: 0 12px 36px oklch(0.85 0.18 120 / 0.3);
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+.btn-kid:active {
+  transform: scale(0.97);
+  filter: brightness(1.08);
+}
+.btn-kid:disabled {
+  opacity: 0.6;
+}
+
+.kid-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-3xl);
+  border: 2px solid oklch(1 0 0 / 0.16);
+  padding: 1.2rem 0.8rem;
+  text-align: center;
+  color: oklch(0.16 0.05 300);
+  box-shadow: 0 12px 30px oklch(0 0 0 / 0.3);
+  transition: transform 0.15s ease;
+}
+.kid-card:active {
+  transform: scale(0.96);
+}
+.kid-card-1 { background: linear-gradient(150deg, oklch(0.88 0.17 90), oklch(0.82 0.19 55)); }
+.kid-card-2 { background: linear-gradient(150deg, oklch(0.82 0.16 340), oklch(0.78 0.18 300)); }
+.kid-card-3 { background: linear-gradient(150deg, oklch(0.85 0.13 220), oklch(0.78 0.16 250)); }
+.kid-card-4 { background: linear-gradient(150deg, oklch(0.88 0.19 140), oklch(0.82 0.16 175)); }
