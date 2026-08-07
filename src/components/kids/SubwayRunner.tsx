@@ -194,284 +194,355 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
 
     ctx.save();
 
-    // CINEMATIC DYNAMIC CAMERA
+    // Subtle, realistic camera motion (no wild rotation)
     if (isPlaying) {
-      const camZoom = 1 + (currentSpeed.current - INITIAL_SPEED) * 0.8 + (playerState.current === "jumping" ? -0.08 : 0);
+      const camZoom = 1 + (currentSpeed.current - INITIAL_SPEED) * 0.25;
       ctx.translate(centerX, horizonY);
       ctx.scale(camZoom, camZoom);
-      const targetTilt = (playerLane.current - 1) * 0.05;
-      ctx.rotate(targetTilt);
+      ctx.rotate((playerLane.current - 1) * 0.012);
       ctx.translate(-centerX, -horizonY);
-
-      const shake = Math.sin(now * 0.06) * (playerState.current !== "normal" ? 10 : 4);
-      ctx.translate(shake, shake);
+      const bob = Math.sin(now * 0.012) * 3;
+      ctx.translate(Math.sin(now * 0.008) * 2, bob);
     }
 
-    // ATMOSPHERIC BACKGROUND
-    const themeHue = 240 + feverFactor.current * 100 + Math.sin(now * 0.001) * 40;
-    const bgGrad = ctx.createRadialGradient(centerX, horizonY, 0, centerX, horizonY, w);
-    bgGrad.addColorStop(0, `hsl(${themeHue}, 80%, 12%)`);
-    bgGrad.addColorStop(1, `hsl(${themeHue}, 60%, 2%)`);
+    // ---------- TUNNEL BACKGROUND ----------
+    const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
+    bgGrad.addColorStop(0, "#12141a");
+    bgGrad.addColorStop(0.35, "#1b1e26");
+    bgGrad.addColorStop(1, "#0b0c10");
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, w, h);
 
-    // EXTREME TUNNEL GEOMETRY
-    const tunnelZSteps = 18;
-    for (let i = tunnelZSteps; i > 0; i--) {
-      const zNear = i * 1.2;
-      const zFar = (i + 1) * 1.2;
-      const pNear = 1 / zNear;
-      const pFar = 1 / zFar;
+    const distT = isPlaying ? distance / 100 : now / 900;
 
-      const x0Near = centerX - roadW * pNear, x1Near = centerX + roadW * pNear;
-      const x0Far = centerX - roadW * pFar, x1Far = centerX + roadW * pFar;
-      const yNear = getY(zNear), yFar = getY(zFar);
+    // ---------- TUNNEL SHELL (concrete walls + ceiling) ----------
+    const zSteps = 20;
+    for (let i = zSteps; i > 0; i--) {
+      const zN = i * 0.8, zF = (i + 1) * 0.8;
+      const pN = 1 / zN, pF = 1 / zF;
+      const x0N = centerX - roadW * pN, x1N = centerX + roadW * pN;
+      const x0F = centerX - roadW * pF, x1F = centerX + roadW * pF;
+      const yN = getY(zN), yF = getY(zF);
+      const whN = tunnelH * pN, whF = tunnelH * pF;
+      const shade = 10 + (i % 2) * 4;
 
-      // Atmospheric Fog
-      const fogAlpha = Math.min(1, i / tunnelZSteps);
-      const fogColor = `hsla(${themeHue}, 60%, 4%, ${fogAlpha})`;
-
-      // Floor (Polished Concrete with Bloom)
-      ctx.fillStyle = i % 2 === 0 ? `hsl(${themeHue}, 50%, 10%)` : `hsl(${themeHue}, 50%, 15%)`;
+      // ballast / trackbed floor
+      ctx.fillStyle = `hsl(28, 8%, ${shade + 6}%)`;
       ctx.beginPath();
-      ctx.moveTo(x0Far, yFar); ctx.lineTo(x1Far, yFar); ctx.lineTo(x1Near, yNear); ctx.lineTo(x0Near, yNear);
+      ctx.moveTo(x0F, yF); ctx.lineTo(x1F, yF); ctx.lineTo(x1N, yN); ctx.lineTo(x0N, yN);
       ctx.fill();
 
+      // side walls: tiled concrete
+      ctx.fillStyle = `hsl(210, 6%, ${shade + 12}%)`;
+      ctx.beginPath();
+      ctx.moveTo(x0F, yF); ctx.lineTo(x0F, yF - whF); ctx.lineTo(x0N, yN - whN); ctx.lineTo(x0N, yN);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(x1F, yF); ctx.lineTo(x1F, yF - whF); ctx.lineTo(x1N, yN - whN); ctx.lineTo(x1N, yN);
+      ctx.fill();
+
+      // ceiling
+      ctx.fillStyle = `hsl(210, 6%, ${shade + 3}%)`;
+      ctx.beginPath();
+      ctx.moveTo(x0F, yF - whF); ctx.lineTo(x1F, yF - whF); ctx.lineTo(x1N, yN - whN); ctx.lineTo(x0N, yN - whN);
+      ctx.fill();
+
+      // structural ribs every few segments
       if (i % 3 === 0) {
-        ctx.fillStyle = `hsla(${themeHue}, 100%, 80%, ${0.2 / zNear})`;
-        ctx.fillRect(x0Near, yNear, x1Near - x0Near, 3);
+        ctx.strokeStyle = `rgba(255,255,255,${0.10 / zN + 0.02})`;
+        ctx.lineWidth = Math.max(1, 10 * pN);
+        ctx.beginPath();
+        ctx.moveTo(x0N, yN); ctx.lineTo(x0N, yN - whN);
+        ctx.lineTo(x1N, yN - whN); ctx.lineTo(x1N, yN);
+        ctx.stroke();
       }
 
-      // Walls with Geometric Support
-      const whNear = tunnelH * pNear, whFar = tunnelH * pFar;
-      ctx.fillStyle = i % 2 === 0 ? `hsl(${themeHue}, 60%, 6%)` : `hsl(${themeHue}, 60%, 10%)`;
-      // Left
+      // wall service cable line
+      ctx.strokeStyle = "rgba(0,0,0,0.35)";
+      ctx.lineWidth = Math.max(1, 6 * pN);
       ctx.beginPath();
-      ctx.moveTo(x0Far, yFar); ctx.lineTo(x0Far, yFar - whFar); ctx.lineTo(x0Near, yNear - whNear); ctx.lineTo(x0Near, yNear);
-      ctx.fill();
-      // Right
+      ctx.moveTo(x0F, yF - whF * 0.55); ctx.lineTo(x0N, yN - whN * 0.55); ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(x1Far, yFar); ctx.lineTo(x1Far, yFar - whFar); ctx.lineTo(x1Near, yNear - whNear); ctx.lineTo(x1Near, yNear);
-      ctx.fill();
+      ctx.moveTo(x1F, yF - whF * 0.55); ctx.lineTo(x1N, yN - whN * 0.55); ctx.stroke();
 
-      // Cyber Beams
-      if (i % 4 === 0) {
-        ctx.strokeStyle = `hsl(${themeHue}, 100%, 70%, ${0.5/zNear})`;
-        ctx.lineWidth = 4;
-        ctx.strokeRect(x0Near, yNear - whNear, 5, whNear);
-        ctx.strokeRect(x1Near - 5, yNear - whNear, 5, whNear);
-      }
-
-      // Fog layer
-      ctx.fillStyle = fogColor;
+      // depth fog
+      ctx.fillStyle = `rgba(12, 14, 18, ${Math.min(0.85, (i / zSteps) * 0.9)})`;
       ctx.beginPath();
-      ctx.moveTo(x0Far, yFar); ctx.lineTo(x1Far, yFar); ctx.lineTo(x1Near, yNear); ctx.lineTo(x0Near, yNear);
+      ctx.moveTo(x0F, yF - whF); ctx.lineTo(x1F, yF - whF); ctx.lineTo(x1N, yN - whN); ctx.lineTo(x0N, yN);
+      ctx.lineTo(x0N, yN); ctx.lineTo(x1N, yN); ctx.lineTo(x1F, yF); ctx.lineTo(x0F, yF);
       ctx.fill();
     }
 
-    // Graffiti with High Glow
-    graffiti.current.forEach(g => {
-      const p = 1 / g.z;
-      const x = getX(g.lane === -0.2 ? -0.1 : 2.1, g.z);
-      const y = getY(g.z) - tunnelH * 0.55 * p;
+    // ---------- CEILING LAMPS (fluorescent tubes) ----------
+    for (let z = 14 - (distT % 1.5); z > 0.6; z -= 1.5) {
+      const p = 1 / z;
+      const y = getY(z) - tunnelH * p;
+      const lw = roadW * 0.5 * p;
+      const alpha = Math.min(1, 4 / z);
       ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(g.lane < 1 ? Math.PI/3 : -Math.PI/3);
-      ctx.font = `bold ${w * 0.7 * p}px system-ui`;
-      ctx.fillStyle = g.color;
-      ctx.shadowBlur = 40 * p; ctx.shadowColor = g.color;
-      ctx.globalAlpha = Math.min(1, 6/g.z);
-      ctx.fillText(g.text, 0, 0);
+      ctx.globalAlpha = alpha;
+      const g = ctx.createRadialGradient(centerX, y, 0, centerX, y, lw * 2.2);
+      g.addColorStop(0, "rgba(255, 246, 214, 0.35)");
+      g.addColorStop(1, "transparent");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.ellipse(centerX, y, lw * 2.2, lw * 0.9, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#fff8dc";
+      ctx.fillRect(centerX - lw / 2, y - 4 * p, lw, Math.max(2, 14 * p));
       ctx.restore();
+    }
+
+    // ---------- SLEEPERS + STEEL RAILS ----------
+    for (let z = 15 - (distT % 0.4); z > 0.45; z -= 0.4) {
+      const p = 1 / z;
+      const tw = roadW * 1.9 * p;
+      const y = getY(z);
+      ctx.fillStyle = `rgba(70, 55, 42, ${Math.min(1, 2.2 / z)})`;
+      ctx.fillRect(centerX - tw / 2, y, tw, Math.max(1.5, 16 * p));
+    }
+    // two rail pairs framing the running track
+    ctx.lineCap = "butt";
+    [0.42, 1.58].forEach((l) => {
+      const grad = ctx.createLinearGradient(0, horizonY, 0, h);
+      grad.addColorStop(0, "rgba(160,170,180,0.25)");
+      grad.addColorStop(1, "rgba(215,225,235,0.9)");
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 7;
+      ctx.beginPath(); ctx.moveTo(getX(l, 1000), horizonY); ctx.lineTo(getX(l, 0.02), h); ctx.stroke();
     });
 
-    // Advanced Lane Spotlight
+    // player lane light pool on the ground
     if (isPlaying || isCounting) {
       const sx = getX(smoothedLaneX.current, 1);
       const sy = h * 0.94;
-      const spotGrad = ctx.createRadialGradient(sx, sy, 0, sx, sy, w * 0.6);
-      spotGrad.addColorStop(0, "rgba(255, 255, 255, 0.5)");
-      spotGrad.addColorStop(0.3, `hsla(${themeHue}, 100%, 80%, 0.3)`);
+      const spotGrad = ctx.createRadialGradient(sx, sy, 0, sx, sy, w * 0.5);
+      spotGrad.addColorStop(0, "rgba(255, 244, 214, 0.22)");
       spotGrad.addColorStop(1, "transparent");
       ctx.fillStyle = spotGrad;
-      ctx.beginPath(); ctx.ellipse(sx, sy, w * 0.8, w * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(sx, sy, w * 0.6, w * 0.2, 0, 0, Math.PI * 2); ctx.fill();
     }
 
-    // Rails & Ties
-    const distT = isPlaying ? distance / 100 : now / 500;
-    for (let z = 15 - (distT % 0.5); z > 0.5; z -= 0.5) {
-      const p = 1 / z;
-      const tw = roadW * 2.5 * p;
-      ctx.fillStyle = `rgba(100, 100, 150, ${1.2 / z})`;
-      ctx.fillRect(centerX - tw / 2, getY(z), tw, 8 * p);
-    }
-    ctx.strokeStyle = `hsla(${themeHue}, 100%, 90%, 0.7)`; ctx.lineWidth = 8;
-    [0.58, 1.42].forEach(l => {
-      ctx.beginPath(); ctx.moveTo(centerX, horizonY); ctx.lineTo(getX(l, 0.02), h); ctx.stroke();
+    // ---------- WALL SIGNS (station posters instead of neon graffiti) ----------
+    graffiti.current.forEach(g => {
+      const p = 1 / g.z;
+      const left = g.lane < 1;
+      const x = getX(left ? -0.15 : 2.15, g.z);
+      const y = getY(g.z) - tunnelH * 0.55 * p;
+      const bw = w * 0.55 * p, bh = w * 0.24 * p;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, 5 / g.z);
+      ctx.translate(x, y);
+      ctx.transform(1, left ? 0.45 : -0.45, 0, 1, 0, 0);
+      ctx.fillStyle = "#0f2f5c";
+      ctx.fillRect(-bw / 2, -bh / 2, bw, bh);
+      ctx.strokeStyle = "rgba(255,255,255,0.55)"; ctx.lineWidth = Math.max(1, 4 * p);
+      ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
+      ctx.fillStyle = "#e8eef7";
+      ctx.font = `600 ${bh * 0.42}px system-ui`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(g.text, 0, 0);
+      ctx.restore();
     });
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
 
-    // Coins (Point Lights & Lens Flare hint)
+    // ---------- TOKENS ----------
     coins.current.forEach(c => {
       if (c.z < 0.2 || c.z > 15) return;
       const x = getX(c.lane, c.z);
       const y = getY(c.z);
-      const size = (w * 0.15) / c.z;
-
-      ctx.save(); // Floor Point Light
-      const lGrad = ctx.createRadialGradient(x, y, 0, x, y, size * 8);
-      lGrad.addColorStop(0, "rgba(255, 215, 0, 0.4)"); lGrad.addColorStop(1, "transparent");
-      ctx.fillStyle = lGrad; ctx.beginPath(); ctx.ellipse(x, y, size * 6, size * 2, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
+      const size = (w * 0.12) / c.z;
 
       ctx.save();
-      ctx.translate(x, y - size);
-      ctx.scale(Math.abs(Math.sin(now * 0.025)), 1);
-      ctx.shadowBlur = 60; ctx.shadowColor = "gold";
-      const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, size);
-      grad.addColorStop(0, "#fff"); grad.addColorStop(0.3, "#fbbf24"); grad.addColorStop(1, "#d97706");
+      ctx.translate(x, y - size * 1.6);
+      ctx.scale(Math.abs(Math.sin(now * 0.004)) * 0.8 + 0.2, 1);
+      const grad = ctx.createLinearGradient(-size, -size, size, size);
+      grad.addColorStop(0, "#fde68a"); grad.addColorStop(0.5, "#f59e0b"); grad.addColorStop(1, "#b45309");
       ctx.fillStyle = grad;
       ctx.beginPath(); ctx.arc(0, 0, size, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#fff3c4"; ctx.lineWidth = Math.max(1, size * 0.14);
+      ctx.beginPath(); ctx.arc(0, 0, size * 0.72, 0, Math.PI * 2); ctx.stroke();
       ctx.restore();
     });
 
-    // Obstacles (Point Light & Reflection)
-    obstacles.current.sort((a,b) => b.z - a.z).forEach(o => {
+    // ---------- OBSTACLES ----------
+    const hazardStripes = (x: number, y: number, bw: number, bh: number) => {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x, y, bw, bh); ctx.clip();
+      ctx.fillStyle = "#facc15"; ctx.fillRect(x, y, bw, bh);
+      ctx.fillStyle = "#18181b";
+      const step = Math.max(6, bh * 0.55);
+      for (let sx = x - bh; sx < x + bw + bh; sx += step * 2) {
+        ctx.beginPath();
+        ctx.moveTo(sx, y + bh); ctx.lineTo(sx + step, y + bh);
+        ctx.lineTo(sx + step + bh, y); ctx.lineTo(sx + bh, y);
+        ctx.fill();
+      }
+      ctx.restore();
+    };
+
+    obstacles.current.sort((a, b) => b.z - a.z).forEach(o => {
       if (o.z < 0.2 || o.z > 15) return;
       const x = getX(o.lane, o.z);
       const y = getY(o.z);
-      const size = (w * 0.32) / o.z;
+      const size = (w * 0.3) / o.z;
 
       ctx.save();
-      ctx.lineWidth = 6; ctx.strokeStyle = "#fff";
-
       if (o.type === "barrier-low") {
-        ctx.fillStyle = "#ff0000"; ctx.shadowBlur = 50 / o.z; ctx.shadowColor = "red";
-        ctx.fillRect(x - size, y - size, size * 2, size); ctx.strokeRect(x - size, y - size, size * 2, size);
+        // maintenance barrier: hazard board on two steel legs
+        const bw = size * 2, bh = size * 0.7;
+        ctx.fillStyle = "#3f3f46";
+        ctx.fillRect(x - size * 0.85, y - size * 0.9, size * 0.16, size * 0.9);
+        ctx.fillRect(x + size * 0.69, y - size * 0.9, size * 0.16, size * 0.9);
+        hazardStripes(x - size, y - size * 1.5, bw, bh);
+        ctx.strokeStyle = "rgba(0,0,0,0.6)"; ctx.lineWidth = Math.max(1, size * 0.08);
+        ctx.strokeRect(x - size, y - size * 1.5, bw, bh);
       } else if (o.type === "barrier-high") {
-        const h_bar = size * 4.5;
-        ctx.fillStyle = "#00ccff"; ctx.shadowBlur = 50 / o.z; ctx.shadowColor = "cyan";
-        ctx.fillRect(x - size, y - h_bar, size * 2, size * 1.2); ctx.strokeRect(x - size, y - h_bar, size * 2, size * 1.2);
+        // overhead gantry / service pipe you must duck under
+        const topY = y - size * 4.4;
+        const bh = size * 0.8;
+        ctx.fillStyle = "#52525b";
+        ctx.fillRect(x - size * 1.05, topY, size * 0.18, size * 4.4);
+        ctx.fillRect(x + size * 0.87, topY, size * 0.18, size * 4.4);
+        hazardStripes(x - size, topY, size * 2, bh);
+        ctx.strokeStyle = "rgba(0,0,0,0.6)"; ctx.lineWidth = Math.max(1, size * 0.08);
+        ctx.strokeRect(x - size, topY, size * 2, bh);
       } else {
-        const trainH = size * 6;
-        // Reflection
-        ctx.save(); ctx.globalAlpha = 0.3 * (1 - o.z/8); ctx.translate(x, y + 15); ctx.scale(1, -0.45);
-        ctx.fillStyle = "#2c445c"; ctx.fillRect(-size, 0, size * 2, trainH * 0.6); ctx.restore();
-
-        // Point Light
-        const lGrad = ctx.createRadialGradient(x, y, 0, x, y, size * 12);
-        lGrad.addColorStop(0, "rgba(200, 255, 255, 0.25)"); lGrad.addColorStop(1, "transparent");
-        ctx.fillStyle = lGrad; ctx.beginPath(); ctx.ellipse(x, y, size * 10, size * 3, 0, 0, Math.PI * 2); ctx.fill();
-
-        const grad = ctx.createLinearGradient(x - size, 0, x + size, 0);
-        grad.addColorStop(0, "#0a131f"); grad.addColorStop(0.5, "#2c445c"); grad.addColorStop(1, "#0a131f");
-        ctx.fillStyle = grad; ctx.fillRect(x - size, y - trainH, size * 2, trainH);
-        ctx.strokeRect(x - size, y - trainH, size * 2, trainH);
-
-        ctx.shadowBlur = 70; ctx.shadowColor = "white"; ctx.fillStyle = "#fff";
-        const eyeSize = size * 0.5;
-        ctx.beginPath(); ctx.arc(x - size * 0.6, y - size * 1, eyeSize, 0, Math.PI * 2);
-        ctx.arc(x + size * 0.6, y - size * 1, eyeSize, 0, Math.PI * 2); ctx.fill();
+        // oncoming metro car
+        const trainH = size * 5.2;
+        const topY = y - trainH;
+        // body
+        const body = ctx.createLinearGradient(x - size, 0, x + size, 0);
+        body.addColorStop(0, "#6b7280");
+        body.addColorStop(0.45, "#d4d8dd");
+        body.addColorStop(1, "#6b7280");
+        ctx.fillStyle = body;
+        ctx.beginPath();
+        const r = size * 0.35;
+        ctx.moveTo(x - size, y);
+        ctx.lineTo(x - size, topY + r);
+        ctx.quadraticCurveTo(x - size, topY, x - size + r, topY);
+        ctx.lineTo(x + size - r, topY);
+        ctx.quadraticCurveTo(x + size, topY, x + size, topY + r);
+        ctx.lineTo(x + size, y);
+        ctx.closePath();
+        ctx.fill();
+        // livery stripe
+        ctx.fillStyle = "#1d4ed8";
+        ctx.fillRect(x - size, y - trainH * 0.28, size * 2, trainH * 0.09);
+        // destination sign
+        ctx.fillStyle = "#0b0f19";
+        ctx.fillRect(x - size * 0.55, topY + size * 0.35, size * 1.1, size * 0.5);
+        ctx.fillStyle = "#fbbf24";
+        ctx.font = `600 ${size * 0.36}px system-ui`;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText("METRO", x, topY + size * 0.6);
+        ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+        // windshield
+        ctx.fillStyle = "#0f172a";
+        ctx.fillRect(x - size * 0.75, topY + size * 1.15, size * 1.5, size * 1.1);
+        ctx.strokeStyle = "rgba(255,255,255,0.25)"; ctx.lineWidth = Math.max(1, size * 0.06);
+        ctx.strokeRect(x - size * 0.75, topY + size * 1.15, size * 1.5, size * 1.1);
+        // headlights
+        ctx.fillStyle = "#fffbe8";
+        [-0.62, 0.62].forEach(k => {
+          const hx = x + size * k, hy = y - size * 0.9;
+          const gl = ctx.createRadialGradient(hx, hy, 0, hx, hy, size * 2.2);
+          gl.addColorStop(0, "rgba(255,250,220,0.55)"); gl.addColorStop(1, "transparent");
+          ctx.fillStyle = gl;
+          ctx.beginPath(); ctx.arc(hx, hy, size * 2.2, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = "#fffbe8";
+          ctx.beginPath(); ctx.arc(hx, hy, size * 0.26, 0, Math.PI * 2); ctx.fill();
+        });
+        // skirt / bogie shadow
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.fillRect(x - size, y - size * 0.35, size * 2, size * 0.35);
       }
       ctx.restore();
     });
 
-    // 4. EXTREME PLAYER AVATAR
+    // ---------- PLAYER ----------
     const pxA = getX(smoothedLaneX.current, 1);
     const pyA = h * 0.9;
 
     if (lm) {
-      const avatarScale = w * 0.65;
-      const avatarY = pyA - (playerState.current === "jumping" ? h * 0.45 : 0);
-      const neonColor = feverFactor.current > 0.4 ? `hsl(${(now * 0.4) % 360}, 100%, 85%)` : (playerState.current === "jumping" ? "#fbbf24" : playerState.current === "ducking" ? "#00ffff" : "#ffffff");
+      const avatarScale = w * 0.6;
+      const avatarY = pyA - (playerState.current === "jumping" ? h * 0.42 : 0);
+      const bodyColor = playerState.current === "jumping" ? "#f59e0b" : playerState.current === "ducking" ? "#38bdf8" : "#e5e7eb";
 
-      // Dynamic Trail
-      if (isPlaying) {
-        trail.current.push({ x: pxA, y: avatarY, a: 1.0 });
-        if (trail.current.length > 20) trail.current.shift();
-      }
-
-      trail.current.forEach((t, i) => {
-        t.a *= 0.94;
-        ctx.save();
-        ctx.globalAlpha = t.a * (i / trail.current.length) * 0.5;
-        ctx.strokeStyle = neonColor;
-        ctx.lineWidth = 2 + (i/trail.current.length) * 25;
-        ctx.beginPath(); ctx.arc(t.x, t.y - avatarScale * 0.4, avatarScale * 0.35, 0, Math.PI * 2); ctx.stroke();
-        ctx.restore();
-      });
-
-      // Reflection
-      ctx.save(); ctx.globalAlpha = 0.4; ctx.translate(pxA, pyA + h * 0.08); ctx.scale(1, -0.6);
-      ctx.strokeStyle = neonColor; ctx.lineWidth = 25;
       const drawSkellie = (yOff: number) => {
         const p_v = (i: number) => ({ x: (0.5 - lm[i]!.x) * avatarScale, y: (lm[i]!.y - baselineY.current) * avatarScale + yOff });
-        const conn: [number, number][] = [[11,12], [11,13], [13,15], [12,14], [14,16], [11,23], [12,24], [23,24], [23,25], [24,26]];
+        const conn: [number, number][] = [[11,12], [11,13], [13,15], [12,14], [14,16], [11,23], [12,24], [23,24], [23,25], [24,26], [25,27], [26,28]];
         conn.forEach(([a, b]) => {
           const p1 = p_v(a), p2 = p_v(b);
           ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
         });
-        const head = p_v(0); ctx.beginPath(); ctx.arc(head.x, head.y, avatarScale * 0.25, 0, Math.PI * 2); ctx.stroke();
+        const head = p_v(0);
+        ctx.beginPath(); ctx.arc(head.x, head.y, avatarScale * 0.16, 0, Math.PI * 2); ctx.stroke();
       };
-      drawSkellie(0); ctx.restore();
 
-      // Main Avatar
-      ctx.save(); ctx.translate(pxA, avatarY); ctx.strokeStyle = neonColor; ctx.shadowColor = neonColor; ctx.shadowBlur = 80;
-      ctx.lineWidth = 28; ctx.lineCap = "round"; drawSkellie(0); ctx.restore();
+      // ground shadow
+      ctx.save();
+      ctx.fillStyle = "rgba(0,0,0,0.45)";
+      ctx.beginPath();
+      ctx.ellipse(pxA, pyA + h * 0.02, avatarScale * 0.22, avatarScale * 0.05, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
 
-      // Action VFX
-      if (playerState.current !== "normal") {
-        ctx.save(); ctx.translate(pxA + w * 0.4, avatarY - h * 0.3);
-        ctx.scale(2.0 + Math.sin(now * 0.03) * 0.4, 2.0 + Math.sin(now * 0.03) * 0.4);
-        ctx.font = `bold ${w * 0.25}px system-ui`;
-        ctx.shadowBlur = 30; ctx.shadowColor = "white";
-        ctx.fillText(playerState.current === "jumping" ? "🚀" : "🛡️", 0, 0);
-        ctx.restore();
-      }
+      ctx.save();
+      ctx.translate(pxA, avatarY);
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      ctx.strokeStyle = "rgba(0,0,0,0.6)"; ctx.lineWidth = 30; drawSkellie(0);
+      ctx.strokeStyle = bodyColor; ctx.lineWidth = 20; drawSkellie(0);
+      ctx.restore();
     }
 
     // Particles
     particles.current.forEach(p => {
       ctx.globalAlpha = p.life;
       ctx.fillStyle = p.color;
-      ctx.shadowBlur = 20; ctx.shadowColor = p.color;
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.size * 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
     });
     ctx.globalAlpha = 1; ctx.shadowBlur = 0;
 
-    // UI Score Pulse
+    // Score pulse
     if (flash.current && now - flash.current.t < 800) {
       ctx.save();
       const k = (now - flash.current.t) / 800;
       ctx.globalAlpha = 1 - k;
-      ctx.translate(w/2, h*0.45);
-      ctx.scale(1 + k * 1.5, 1 + k * 1.5);
+      ctx.translate(w / 2, h * 0.45);
+      ctx.scale(1 + k * 0.8, 1 + k * 0.8);
       ctx.fillStyle = flash.current.color;
-      ctx.font = `bold ${w * 0.18}px system-ui`;
+      ctx.font = `bold ${w * 0.14}px system-ui`;
       ctx.textAlign = "center";
       ctx.fillText(flash.current.text, 0, 0);
       ctx.restore();
+      ctx.textAlign = "left";
     }
 
-    // SPEED LINES (Post-Process Aberration hint)
-    if (isPlaying) {
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.3)"; ctx.lineWidth = 3;
-      for (let i = 0; i < 20; i++) {
-        const sx = Math.random() * w, sy = Math.random() * h;
-        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + (sx - centerX) * 0.4, sy + (sy - horizonY) * 0.4); ctx.stroke();
+    // Motion blur streaks at high speed
+    if (isPlaying && currentSpeed.current > INITIAL_SPEED * 1.6) {
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.10)"; ctx.lineWidth = 2;
+      for (let i = 0; i < 12; i++) {
+        const sx = Math.random() * w, sy = horizonY + Math.random() * (h - horizonY);
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + (sx - centerX) * 0.25, sy + (sy - horizonY) * 0.25); ctx.stroke();
       }
     }
+
+    // Vignette
+    const vig = ctx.createRadialGradient(centerX, h * 0.55, w * 0.3, centerX, h * 0.55, w * 0.95);
+    vig.addColorStop(0, "transparent"); vig.addColorStop(1, "rgba(0,0,0,0.6)");
+    ctx.fillStyle = vig; ctx.fillRect(0, 0, w, h);
 
     // Countdown
     if (isCounting) {
       ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = "#fff"; ctx.font = `bold ${w * 0.7}px system-ui`;
+      ctx.fillStyle = "#fff"; ctx.font = `bold ${w * 0.5}px system-ui`;
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.shadowBlur = 100; ctx.shadowColor = "gold";
       ctx.fillText(countdown.toString(), w / 2, h / 2);
+      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
     }
 
     ctx.restore();
-  }, [countdown, distance]); // Added distance to deps for better track update
+  }, [countdown, distance]);
 
 
 
