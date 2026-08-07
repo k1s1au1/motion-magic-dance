@@ -4,7 +4,7 @@ import { usePoseCamera, type FrameInfo } from "@/lib/usePoseCamera";
 import { audio } from "@/lib/audioUtils";
 
 type Lane = 0 | 1 | 2; // Left, Center, Right
-type Obstacle = { id: number; lane: Lane; z: number; type: "barrier-low" | "barrier-high" | "train"; passed?: boolean };
+type Obstacle = { id: number; lane: Lane; z: number; type: "barrier-low" | "barrier-high" | "train"; passed?: boolean; hinted?: boolean };
 type Coin = { id: number; lane: Lane; z: number };
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: string; size: number };
 
