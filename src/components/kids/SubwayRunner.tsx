@@ -53,7 +53,7 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
     }
   };
 
-  const onFrame = useCallback(({ lm, ctx, w, h, dt, now }: FrameInfo) => {
+  const onFrame = useCallback(({ lm, ctx, w, h, dt, now, visible: poseOk }: FrameInfo) => {
     const isPlaying = phaseRef.current === "playing";
     const isCounting = phaseRef.current === "counting";
     const isCalibrating = phaseRef.current === "calibrating";
@@ -86,7 +86,7 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
 
     // Calibration Logic in Loop
     if (isCalibrating) {
-      if (visible) {
+      if (poseOk) {
         calibrationTimer.current += dt;
         if (calibrationTimer.current > 2.0) {
           startCountdown();

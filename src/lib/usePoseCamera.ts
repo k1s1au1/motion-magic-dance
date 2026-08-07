@@ -15,6 +15,8 @@ export type FrameInfo = {
   h: number;
   dt: number;
   now: number;
+  /** true when a full body pose is currently detected (live value, safe inside callbacks) */
+  visible: boolean;
 };
 
 /**
@@ -28,6 +30,7 @@ export function usePoseCamera(onFrame: (f: FrameInfo) => void, skeletonColor = "
   const rafRef = useRef<number | null>(null);
   const lastVideoTime = useRef(-1);
   const lastLm = useRef<Landmarks | null>(null);
+  const visibleRef = useRef(false);
   const lastTs = useRef(0);
   const frameRef = useRef(onFrame);
   frameRef.current = onFrame;
@@ -56,9 +59,11 @@ export function usePoseCamera(onFrame: (f: FrameInfo) => void, skeletonColor = "
       const lm = res.landmarks?.[0] as Landmarks | undefined;
       if (poseVisible(lm)) {
         lastLm.current = lm;
+        visibleRef.current = true;
         setVisible(true);
       } else {
         lastLm.current = null;
+        visibleRef.current = false;
         setVisible(false);
       }
     }
@@ -102,7 +107,7 @@ export function usePoseCamera(onFrame: (f: FrameInfo) => void, skeletonColor = "
       ctx.restore();
     }
 
-    frameRef.current({ lm, ctx, w, h, dt, now });
+    frameRef.current({ lm, ctx, w, h, dt, now, visible: visibleRef.current });
   }, [skeletonColor]);
 
   const start = useCallback(async () => {
@@ -151,7 +156,7 @@ export function usePoseCamera(onFrame: (f: FrameInfo) => void, skeletonColor = "
     };
   }, []);
 
-  return { videoRef, canvasRef, start, status, error, visible };
+  return { videoRef, canvasRef, start, status, error, visible, visibleRef };
 }
 
 /** Mirrored screen position (0..1) of a landmark, matching what the child sees. */

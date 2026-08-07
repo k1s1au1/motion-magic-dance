@@ -43,7 +43,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
     }
   };
 
-  const onFrame = useCallback(({ lm, ctx, w, h, dt, now }: FrameInfo) => {
+  const onFrame = useCallback(({ lm, ctx, w, h, dt, now, visible: poseOk }: FrameInfo) => {
     const isCalibrating = phaseRef.current === "calibrating";
     const isPlaying = phaseRef.current === "playing";
 
@@ -63,7 +63,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
 
     // Calibration Logic
     if (isCalibrating) {
-      if (visible) {
+      if (poseOk) {
         calibrationTimer.current += dt;
         if (calibrationTimer.current > 2.0) {
           startPlaying();
