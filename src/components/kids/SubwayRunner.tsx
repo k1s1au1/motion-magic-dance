@@ -148,6 +148,17 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
       graffiti.current.forEach(g => g.z -= speed);
       graffiti.current = graffiti.current.filter(g => g.z > 0.1);
 
+      // Voice coach: warn about what is coming in the player's lane
+      obstacles.current.forEach(o => {
+        if (o.hinted || o.lane !== playerLane.current) return;
+        if (o.z < 4.2 && o.z > 2.4) {
+          o.hinted = true;
+          if (o.type === "barrier-low") audio.speak("اقفز!");
+          else if (o.type === "barrier-high") audio.speak("انخفض!");
+          else audio.speak(o.lane === 2 ? "روح يسار!" : "روح يمين!");
+        }
+      });
+
       // Collision
       obstacles.current.forEach(o => {
         if (o.z < 0.15 && o.z > -0.1 && o.lane === playerLane.current) {
@@ -157,6 +168,7 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
           if (!safeJump && !safeDuck) {
             audio.playFail();
             audio.stopMusic();
+            audio.speak("أوووه! حاول مرة ثانية", { force: true });
             phaseRef.current = "finished";
             setPhase("finished");
             spawnParticles(w/2, h/2, "#ff0000", 50);
