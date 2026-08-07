@@ -97,17 +97,29 @@ class AudioService {
   }
 
   private musicInterval: any = null;
+  private lastSpeak = 0;
+  private lastPhrase = "";
 
-  /** تشغيل موسيقى للأطفال (إيقاع بسيط) */
-  startKidsMusic() {
+  /** موسيقى حماسية للأطفال: باص + إيقاع + لحن مرح */
+  startKidsMusic(bpm = 132) {
     this.stopMusic();
-    let beat = 0;
+    this.init();
+    const step = 60000 / bpm / 2; // 8th notes
+    const melody = [523.25, 659.25, 783.99, 659.25, 587.33, 783.99, 880, 783.99];
+    const bass = [130.81, 130.81, 174.61, 174.61, 196, 196, 174.61, 146.83];
+    let i = 0;
     this.musicInterval = setInterval(() => {
-      const freq = beat % 4 === 0 ? 200 : 150;
-      this.playTone(freq, "sine", 0.1, 0.05);
-      if (beat % 8 === 0) this.playTone(400, "sine", 0.05, 0.03);
-      beat++;
-    }, 400);
+      const b = i % 8;
+      // bass pulse
+      this.playTone(bass[b] ?? 130.81, "triangle", 0.18, 0.09);
+      // kick / hats
+      if (b % 2 === 0) this.playTone(70, "sine", 0.12, 0.14);
+      else this.playTone(1800, "square", 0.02, 0.02);
+      // melody hook every bar
+      this.playTone(melody[b] ?? 523.25, "square", 0.12, 0.05);
+      if (b === 0) this.playTone((melody[0] ?? 523) * 2, "sine", 0.1, 0.04);
+      i++;
+    }, step);
   }
 
   /** إيقاف أي موسيقى جارية */
@@ -116,6 +128,32 @@ class AudioService {
       clearInterval(this.musicInterval);
       this.musicInterval = null;
     }
+  }
+
+  /** نطق تعليمات بالعربية (يمين، يسار، اقفز، انخفض...) */
+  speak(text: string, { cooldown = 700, force = false }: { cooldown?: number; force?: boolean } = {}) {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const now = performance.now();
+    if (!force && (now - this.lastSpeak < cooldown || (text === this.lastPhrase && now - this.lastSpeak < 1500))) return;
+    this.lastSpeak = now;
+    this.lastPhrase = text;
+    try {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "ar-SA";
+      u.rate = 1.15;
+      u.pitch = 1.35;
+      u.volume = 1;
+      const voices = window.speechSynthesis.getVoices();
+      const ar = voices.find((v) => v.lang?.toLowerCase().startsWith("ar"));
+      if (ar) u.voice = ar;
+      window.speechSynthesis.speak(u);
+    } catch {
+      /* المتصفح لا يدعم النطق */
+    }
+  }
+
+  stopSpeech() {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
   }
 }
 
