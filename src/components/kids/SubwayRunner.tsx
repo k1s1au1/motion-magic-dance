@@ -460,7 +460,7 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
     ctx.restore();
   }, [countdown, distance]); // Added distance to deps for better track update
 
-  const { videoRef, canvasRef, start, status, error } = usePoseCamera(onFrame, "hsl(280 100% 70%)");
+
 
   useEffect(() => {
     return () => { audio.stopMusic(); };

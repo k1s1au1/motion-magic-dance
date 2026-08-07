@@ -178,7 +178,7 @@ export default function AnimalPoses({ onBack }: { onBack: () => void }) {
     const blurGrad = ctx.createRadialGradient(w/2, h/2, w*0.4, w/2, h/2, w*0.8);
     blurGrad.addColorStop(0, "transparent"); blurGrad.addColorStop(1, "rgba(0,0,0,0.3)");
     ctx.fillStyle = blurGrad; ctx.fillRect(0,0,w,h);
-
+    }
   }, []);
 
   const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "rgba(255, 255, 255, 0.4)");
