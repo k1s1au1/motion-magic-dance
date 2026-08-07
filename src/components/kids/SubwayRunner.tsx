@@ -40,6 +40,19 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
 
   const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "hsl(280 100% 70%)");
 
+  const spawnParticles = (x: number, y: number, color: string, count: number) => {
+    for (let i = 0; i < count; i++) {
+      particles.current.push({
+        x, y,
+        vx: (Math.random() - 0.5) * 12,
+        vy: (Math.random() - 0.5) * 12,
+        life: 1,
+        color,
+        size: Math.random() * 6 + 3,
+      });
+    }
+  };
+
   const onFrame = useCallback(({ lm, ctx, w, h, dt, now }: FrameInfo) => {
     const isPlaying = phaseRef.current === "playing";
     const isCounting = phaseRef.current === "counting";
@@ -104,7 +117,7 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
         graffiti.current.push({
           lane: Math.random() > 0.5 ? -0.2 : 2.2,
           z: 18,
-          text: texts[Math.floor(Math.random() * texts.length)],
+          text: texts[Math.floor(Math.random() * texts.length)]!,
           color: `hsl(${Math.random() * 360}, 100%, 70%)`
         });
       }
@@ -137,7 +150,7 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
       // Collect coins
       const collectedIdx = coins.current.findIndex(c => c.z < 0.3 && c.z > -0.1 && c.lane === playerLane.current);
       if (collectedIdx !== -1) {
-        const c = coins.current[collectedIdx];
+        const c = coins.current[collectedIdx]!;
         const cx = w/2 + (c.lane - 1) * (w*1.5/3) * (1/c.z);
         const cy = h*0.35 + (h - h*0.35) * (1/c.z);
         spawnParticles(cx, cy, "#fff5a0", 20);
@@ -391,7 +404,7 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
       ctx.save(); ctx.globalAlpha = 0.4; ctx.translate(pxA, pyA + h * 0.08); ctx.scale(1, -0.6);
       ctx.strokeStyle = neonColor; ctx.lineWidth = 25;
       const drawSkellie = (yOff: number) => {
-        const p_v = (i: number) => ({ x: (0.5 - lm[i].x) * avatarScale, y: (lm[i].y - baselineY.current) * avatarScale + yOff });
+        const p_v = (i: number) => ({ x: (0.5 - lm[i]!.x) * avatarScale, y: (lm[i]!.y - baselineY.current) * avatarScale + yOff });
         const conn: [number, number][] = [[11,12], [11,13], [13,15], [12,14], [14,16], [11,23], [12,24], [23,24], [23,25], [24,26]];
         conn.forEach(([a, b]) => {
           const p1 = p_v(a), p2 = p_v(b);
@@ -460,7 +473,7 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
     ctx.restore();
   }, [countdown, distance]); // Added distance to deps for better track update
 
-  const { videoRef, canvasRef, start, status, error } = usePoseCamera(onFrame, "hsl(280 100% 70%)");
+
 
   useEffect(() => {
     return () => { audio.stopMusic(); };

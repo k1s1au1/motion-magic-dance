@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
+import { audio } from "@/lib/audioUtils";
 import { POSE_CONNECTIONS, makeRoutine, poseVisible, rating, type Landmarks, type Move } from "@/lib/dance";
 
 const WASM_BASE = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";

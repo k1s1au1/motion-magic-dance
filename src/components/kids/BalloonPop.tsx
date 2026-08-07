@@ -28,7 +28,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
     for (let i = 0; i < 25; i++) {
       particles.current.push({
         x, y, vx: (Math.random() - 0.5) * 12, vy: (Math.random() - 0.5) * 12,
-        life: 1, color: COLORS[Math.floor(Math.random()*COLORS.length)],
+        life: 1, color: COLORS[Math.floor(Math.random()*COLORS.length)]!,
         size: Math.random() * 8 + 4, rotation: Math.random() * Math.PI, dr: (Math.random()-0.5)*0.2,
         type: 'confetti'
       });
