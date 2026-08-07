@@ -113,7 +113,7 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
       smoothedLaneX.current = smoothedLaneX.current * 0.82 + playerLane.current * 0.18;
 
       if (Math.random() < 0.015) {
-        const texts = ["DANCE", "SWIFT", "METRO", "JET", "WOW", "LOVABLE", "EXTREME", "ULTRA"];
+        const texts = ["محطة الملك", "METRO", "المسار ٢", "خروج ⟶", "الرصيف A", "المركز", "تحويلة", "PLATFORM 3"];
         graffiti.current.push({
           lane: Math.random() > 0.5 ? -0.2 : 2.2,
           z: 18,
