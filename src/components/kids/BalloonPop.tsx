@@ -43,7 +43,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
     }
   };
 
-  const onFrame = useCallback(({ lm, ctx, w, h, dt, now }: FrameInfo) => {
+  const onFrame = useCallback(({ lm, ctx, w, h, dt, now, visible: poseOk }: FrameInfo) => {
     const isCalibrating = phaseRef.current === "calibrating";
     const isPlaying = phaseRef.current === "playing";
 
@@ -63,7 +63,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
 
     // Calibration Logic
     if (isCalibrating) {
-      if (visible) {
+      if (poseOk) {
         calibrationTimer.current += dt;
         if (calibrationTimer.current > 2.0) {
           startPlaying();
@@ -100,7 +100,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
         for (const hnd of hands) {
           if (Math.hypot(hnd.x - b.x, (hnd.y - b.y) * (h / w)) < b.r * 1.1) {
             spawnParticles(b.x * w, b.y * h, b.color);
-            setPopped((p) => p + 1); audio.playPop(); return false;
+            setPopped((p) => p + 1); audio.playPop(); audio.speak("فرقعة!", { cooldown: 2500 }); return false;
           }
         }
       }
@@ -189,7 +189,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
     items.current = []; particles.current = [];
     setPopped(0); setMissed(0); setTimeLeft(60);
     spawnAt.current = performance.now(); endAt.current = performance.now() + GAME_MS;
-    phaseRef.current = "playing"; setPhase("playing"); audio.startKidsMusic();
+    phaseRef.current = "playing"; setPhase("playing"); audio.startKidsMusic(140); audio.speak("فرقع كل البالونات!", { force: true });
   };
 
   const setPhaseBoth = (p: typeof phase) => {
