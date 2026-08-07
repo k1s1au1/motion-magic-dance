@@ -62,41 +62,61 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
     const isCounting = phaseRef.current === "counting";
     const isCalibrating = phaseRef.current === "calibrating";
 
-    // 1. Logic: Body Tracking
-    if (lm) {
+    // 1. Logic: Body Tracking (scale + position calibrated per player)
+    if (lm && poseOk) {
       const nose = lm[0];
-      if (nose) {
+      const ls = lm[11], rs = lm[12];
+      if (nose && ls && rs) {
+        // body scale = shoulder width, keeps thresholds valid at any distance
+        const shoulders = Math.abs(ls.x - rs.x);
         const nx = 1 - nose.x;
-        if (nx < 0.35) playerLane.current = 0;
-        else if (nx > 0.65) playerLane.current = 2;
-        else playerLane.current = 1;
 
-        if (!calibrated.current) {
-          baselineY.current = baselineY.current * 0.9 + nose.y * 0.1;
+        if (isCalibrating || !calibrated.current) {
+          // smooth running average while the player stands still in the middle
+          const k = calibSamples.current < 20 ? 0.35 : 0.08;
+          baselineX.current = baselineX.current * (1 - k) + nx * k;
+          baselineY.current = baselineY.current * (1 - k) + nose.y * k;
+          bodyScale.current = bodyScale.current * (1 - k) + Math.max(0.08, shoulders) * k;
+          calibSamples.current += 1;
+        }
+
+        const scale = Math.max(0.08, bodyScale.current);
+        const laneGap = scale * 0.85;
+        const dx = nx - baselineX.current;
+        const lane: Lane = dx < -laneGap ? 0 : dx > laneGap ? 2 : 1;
+        playerLane.current = lane;
+
+        if (isPlaying && lane !== lastLane.current) {
+          lastLane.current = lane;
+          if (lane === 0) audio.speak("يسار");
+          else if (lane === 2) audio.speak("يمين");
+          else audio.speak("النص");
         }
 
         const dy = nose.y - baselineY.current;
-        if (dy < -0.1 && playerState.current === "normal") {
+        if (dy < -scale * 0.45 && playerState.current === "normal") {
           playerState.current = "jumping";
           stateTimer.current = now + 650;
-          if (isPlaying) audio.playJump();
-        } else if (dy > 0.12 && playerState.current === "normal") {
+          if (isPlaying) { audio.playJump(); audio.speak("اقفز!"); }
+        } else if (dy > scale * 0.55 && playerState.current === "normal") {
           playerState.current = "ducking";
           stateTimer.current = now + 650;
-          if (isPlaying) audio.playDuck();
+          if (isPlaying) { audio.playDuck(); audio.speak("انخفض!"); }
         }
       }
     }
 
-    // Calibration Logic in Loop
+    // Calibration Logic in Loop: player must stand still and centered
     if (isCalibrating) {
-      if (poseOk) {
+      const nose = lm?.[0];
+      const steady = poseOk && !!nose && Math.abs(1 - nose.x - baselineX.current) < 0.06 && Math.abs(nose.y - baselineY.current) < 0.06;
+      if (steady && calibSamples.current > 25) {
         calibrationTimer.current += dt;
         if (calibrationTimer.current > 2.0) {
           startCountdown();
         }
       } else {
-        calibrationTimer.current = 0;
+        calibrationTimer.current = Math.max(0, calibrationTimer.current - dt);
       }
     }
 
