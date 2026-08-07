@@ -31,8 +31,8 @@ export default function FreezeDance({ onBack }: { onBack: () => void }) {
     modeRef.current = m;
     setMode(m);
     modeChangeAt.current = performance.now();
-    if (m === "freeze") audio.playStop();
-    else audio.playStart();
+    if (m === "freeze") { audio.playStop(); audio.speak("تجمّد!", { force: true }); }
+    else { audio.playStart(); audio.speak("ارقص!", { force: true }); }
   };
 
   const onFrame = useCallback(({ lm, ctx, w, h, dt, now, visible: poseOk }: FrameInfo) => {
@@ -88,7 +88,7 @@ export default function FreezeDance({ onBack }: { onBack: () => void }) {
         if (energy > 0.3) {
           flash.current = { text: "تحركت! ❄️", t: now, good: false };
           scoredRef.current = true;
-          audio.playFail();
+          audio.playFail(); audio.speak("تحركت!");
           // Spawn frost on movement error
           for(let i=0; i<5; i++) {
             frostCrystals.current.push({
@@ -106,7 +106,7 @@ export default function FreezeDance({ onBack }: { onBack: () => void }) {
           if (!scoredRef.current) {
             setScore((s) => s + 750);
             flash.current = { text: "تمثال أسطوري! 🗿", t: now, good: true };
-            audio.playSuccess();
+            audio.playSuccess(); audio.speak("ممتاز!");
           }
           roundRef.current += 1;
           setRound(roundRef.current);

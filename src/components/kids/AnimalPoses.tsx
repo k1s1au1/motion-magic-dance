@@ -73,7 +73,10 @@ export default function AnimalPoses({ onBack }: { onBack: () => void }) {
     if (idxRef.current >= orderRef.current.length) {
       phaseRef.current = "finished"; setPhase("finished"); setTarget(null); return;
     }
-    setRound(idxRef.current + 1); setTarget(orderRef.current[idxRef.current] ?? null);
+    setRound(idxRef.current + 1);
+    const nextPose = orderRef.current[idxRef.current] ?? null;
+    setTarget(nextPose);
+    if (nextPose) audio.speak(`سوّ وقفة ${nextPose.name}`, { force: true });
     roundEnd.current = now + ROUND_MS;
   };
 
@@ -139,7 +142,7 @@ export default function AnimalPoses({ onBack }: { onBack: () => void }) {
       holdRef.current += 16.7; setHold(Math.min(1, holdRef.current / HOLD_MS));
       if (holdRef.current >= HOLD_MS) {
         setScore((s) => s + 1000 + Math.round(q * 500));
-        setWin(true); audio.playSuccess();
+        setWin(true); audio.playSuccess(); audio.speak("رائع!", { force: true });
         nextRound(now); return;
       }
     } else {
@@ -183,7 +186,7 @@ export default function AnimalPoses({ onBack }: { onBack: () => void }) {
 
   const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "rgba(255, 255, 255, 0.4)");
 
-  useEffect(() => { return () => { audio.stopMusic(); }; }, []);
+  useEffect(() => { return () => { audio.stopMusic(); audio.stopSpeech(); }; }, []);
 
   const play = async () => {
     calibrationTimer.current = 0;
@@ -196,8 +199,9 @@ export default function AnimalPoses({ onBack }: { onBack: () => void }) {
     const shuffled = [...KID_POSES].sort(() => Math.random() - 0.5).slice(0, ROUNDS);
     orderRef.current = shuffled; idxRef.current = 0; holdRef.current = 0;
     setScore(0); setHold(0); setWin(false); setRound(1); setTarget(shuffled[0] ?? null);
+    if (shuffled[0]) audio.speak(`سوّ وقفة ${shuffled[0].name}`, { force: true });
     roundEnd.current = performance.now() + ROUND_MS;
-    phaseRef.current = "playing"; setPhase("playing"); audio.startKidsMusic();
+    phaseRef.current = "playing"; setPhase("playing"); audio.startKidsMusic(120);
   };
 
   const setPhaseBoth = (p: typeof phase) => {

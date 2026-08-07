@@ -95,10 +95,10 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
       }
       if (hit) {
         if (it.kind === "star") {
-          setScore((s) => s + 150); setCaught((c) => c + 1); audio.playCoin();
+          setScore((s) => s + 150); setCaught((c) => c + 1); audio.playCoin(); audio.speak("نجمة!", { cooldown: 2500 });
           flashOpacity.current = 0.4; spawnParticles(it.x * w, it.y * h, "#fff5a0", 25);
         } else {
-          setScore((s) => Math.max(0, s - 100)); audio.playFail();
+          setScore((s) => Math.max(0, s - 100)); audio.playFail(); audio.speak("احذر القنبلة!", { cooldown: 2000 });
           spawnParticles(it.x * w, it.y * h, "#ff4444", 30, false);
         }
         return false;
@@ -194,7 +194,7 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
     items.current = []; particles.current = []; flashOpacity.current = 0;
     setScore(0); setCaught(0); setTimeLeft(60);
     spawnAt.current = performance.now(); endAt.current = performance.now() + GAME_MS;
-    phaseRef.current = "playing"; setPhase("playing"); audio.startKidsMusic();
+    phaseRef.current = "playing"; setPhase("playing"); audio.startKidsMusic(140); audio.speak("امسك النجوم!", { force: true });
   };
 
   const setPhaseBoth = (p: typeof phase) => {
