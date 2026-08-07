@@ -36,7 +36,11 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
 
   // Calibration
   const baselineY = useRef(0.5);
+  const baselineX = useRef(0.5);
+  const bodyScale = useRef(0.18);
   const calibrated = useRef(false);
+  const lastLane = useRef<Lane>(1);
+  const calibSamples = useRef(0);
 
   const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "hsl(280 100% 70%)");
 
