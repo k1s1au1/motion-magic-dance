@@ -583,22 +583,29 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
 
 
   useEffect(() => {
-    return () => { audio.stopMusic(); };
+    return () => { audio.stopMusic(); audio.stopSpeech(); };
   }, []);
 
   const play = async () => {
     calibrated.current = false;
     calibrationTimer.current = 0;
+    calibSamples.current = 0;
+    lastLane.current = 1;
+    baselineX.current = 0.5;
+    baselineY.current = 0.5;
+    bodyScale.current = 0.18;
     await start();
-
     setPhaseBoth("calibrating");
+    audio.speak("قف في نص الشاشة وخلّي جسمك كامل يبان", { force: true });
   };
 
   const startCountdown = async () => {
     if (phaseRef.current === "counting") return;
     setPhaseBoth("counting");
+    audio.speak("استعد!", { force: true });
     for (let i = 3; i > 0; i--) {
       setCountdown(i);
+      audio.speak(String(i), { cooldown: 0, force: true });
       await new Promise(r => setTimeout(r, 1000));
     }
     calibrated.current = true;
@@ -612,7 +619,8 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
     currentSpeed.current = INITIAL_SPEED;
     phaseRef.current = "playing";
     setPhase("playing");
-    audio.startKidsMusic();
+    audio.startKidsMusic(138);
+    audio.speak("انطلق!", { force: true });
   };
 
   const setPhaseBoth = (p: typeof phase) => {
