@@ -6,6 +6,10 @@ const BalloonPop = lazy(() => import("@/components/kids/BalloonPop"));
 const FreezeDance = lazy(() => import("@/components/kids/FreezeDance"));
 const AnimalPoses = lazy(() => import("@/components/kids/AnimalPoses"));
 const SubwayRunner = lazy(() => import("@/components/kids/SubwayRunner"));
+const FruitNinja = lazy(() => import("@/components/kids/FruitNinja"));
+const GoalKeeper = lazy(() => import("@/components/kids/GoalKeeper"));
+const LaserDodge = lazy(() => import("@/components/kids/LaserDodge"));
+
 
 export const Route = createFileRoute("/kids")({
   head: () => ({
