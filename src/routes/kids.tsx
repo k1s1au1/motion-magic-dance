@@ -31,15 +31,19 @@ export const Route = createFileRoute("/kids")({
   component: KidsPage,
 });
 
-type GameId = "stars" | "balloons" | "freeze" | "animals" | "subway";
+type GameId = "stars" | "balloons" | "freeze" | "animals" | "subway" | "fruit" | "goal" | "laser";
 
 const GAMES: { id: GameId; name: string; emoji: string; desc: string; color: string }[] = [
   { id: "subway", name: "مغامرة المترو", emoji: "🏃", desc: "اركض واقفز لتفادي العقبات", color: "from-blue-500 to-indigo-600" },
+  { id: "fruit", name: "نينجا الفواكه", emoji: "🍉", desc: "قطّع الفواكه بيديك واحذر القنابل", color: "from-lime-400 to-emerald-600" },
+  { id: "goal", name: "حارس المرمى", emoji: "🥅", desc: "صدّ الكرات قبل ما تدخل", color: "from-teal-400 to-cyan-600" },
+  { id: "laser", name: "ممر الليزر", emoji: "🔦", desc: "اقفز وانخفض لتفادي الأشعة", color: "from-fuchsia-500 to-purple-700" },
   { id: "stars", name: "اصطاد النجوم", emoji: "⭐", desc: "المس النجوم النازلة بيديك", color: "from-amber-400 to-orange-500" },
   { id: "balloons", name: "فرقعة البالونات", emoji: "🎈", desc: "فرقع البالونات الطايرة", color: "from-pink-500 to-rose-600" },
   { id: "freeze", name: "تمثال!", emoji: "🗿", desc: "ارقص وتجمّد عند الإشارة", color: "from-cyan-400 to-blue-500" },
   { id: "animals", name: "قلّد الحيوان", emoji: "🦒", desc: "سوّ وقفة الحيوان واثبت", color: "from-green-400 to-emerald-600" },
 ];
+
 
 function KidsPage() {
   const [game, setGame] = useState<GameId | null>(null);
@@ -54,6 +58,10 @@ function KidsPage() {
           {game === "freeze" && <FreezeDance onBack={back} />}
           {game === "animals" && <AnimalPoses onBack={back} />}
           {game === "subway" && <SubwayRunner onBack={back} />}
+          {game === "fruit" && <FruitNinja onBack={back} />}
+          {game === "goal" && <GoalKeeper onBack={back} />}
+          {game === "laser" && <LaserDodge onBack={back} />}
+
         </Suspense>
       </ClientOnly>
 
