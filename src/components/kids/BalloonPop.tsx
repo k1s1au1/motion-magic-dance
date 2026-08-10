@@ -178,14 +178,16 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
 
     // Hand Halos
     hands.forEach(hnd => {
-      ctx.save();
       const pulse = 1 + Math.sin(now * 0.01) * 0.2;
-      const hGrad = ctx.createRadialGradient(hnd.x*w, hnd.y*h, 0, hnd.x*w, hnd.y*h, 0.1*w);
-      hGrad.addColorStop(0, "rgba(255, 255, 255, 0.5)"); hGrad.addColorStop(1, "transparent");
-      ctx.fillStyle = hGrad;
-      ctx.beginPath(); ctx.arc(hnd.x*w, hnd.y*h, 0.08 * w * pulse, 0, Math.PI*2); ctx.fill();
+      glow(ctx, hnd.x*w, hnd.y*h, 0.11 * w * pulse, "#ffffff", 0.6);
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,255,255,0.7)";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(hnd.x*w, hnd.y*h, 0.05 * w * pulse, 0, Math.PI*2); ctx.stroke();
       ctx.restore();
     });
+
+    vignette(ctx, w, h, 0.35);
   }, []);
 
   const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "rgba(255, 255, 255, 0.4)");
