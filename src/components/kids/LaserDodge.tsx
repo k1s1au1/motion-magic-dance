@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import GameStage, { KidHud } from "./GameStage";
+import DifficultyPicker from "./DifficultyPicker";
 import { mirrored, usePoseCamera, type FrameInfo } from "@/lib/usePoseCamera";
 import { L } from "@/lib/dance";
 import { audio } from "@/lib/audioUtils";
+import { useDifficulty } from "@/lib/difficulty";
+import { createCalibrator } from "@/lib/calibration";
+import { airDust, glow, neonBeam, vignette, withAlpha } from "@/lib/gfx";
 
 type Laser = { y: number; vy: number; kind: "high" | "low"; hinted: boolean; scored: boolean };
 type Spark = { x: number; y: number; vx: number; vy: number; life: number };
@@ -10,68 +14,77 @@ type Spark = { x: number; y: number; vx: number; vy: number; life: number };
 const MAX_LIVES = 3;
 
 export default function LaserDodge({ onBack }: { onBack: () => void }) {
+  const { diff, id: diffId, select } = useDifficulty();
+  const diffRef = useRef(diff);
+  diffRef.current = diff;
+
   const [phase, setPhase] = useState<"idle" | "calibrating" | "playing" | "finished">("idle");
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(MAX_LIVES);
   const [level, setLevel] = useState(1);
+  const [calib, setCalib] = useState({ progress: 0, steady: false });
   const phaseRef = useRef<"idle" | "calibrating" | "playing" | "finished">("idle");
   const lasers = useRef<Laser[]>([]);
   const sparks = useRef<Spark[]>([]);
   const spawnAt = useRef(0);
-  const calibTimer = useRef(0);
   const livesRef = useRef(MAX_LIVES);
   const scoreRef = useRef(0);
-  const baseNoseY = useRef(0.45);
-  const bodyScale = useRef(0.18);
   const invuln = useRef(0);
   const flash = useRef(0);
+  const cal = useRef(createCalibrator({ holdSeconds: 1.6 }));
 
   const onFrame = useCallback(({ lm, ctx, w, h, dt, now, visible: poseOk }: FrameInfo) => {
     const isCalibrating = phaseRef.current === "calibrating";
     const isPlaying = phaseRef.current === "playing";
+    const d = diffRef.current;
 
-    // خلفية معمل ليزر
-    const bg = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w);
-    bg.addColorStop(0, "#160a28");
-    bg.addColorStop(1, "#05030c");
+    // خلفية معمل ليزر بعمق ومنظور
+    const bg = ctx.createRadialGradient(w / 2, h * 0.42, 0, w / 2, h * 0.5, w * 1.1);
+    bg.addColorStop(0, "#1b0d33");
+    bg.addColorStop(0.6, "#0c0619");
+    bg.addColorStop(1, "#03020a");
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = "rgba(160,80,255,0.08)";
-    ctx.lineWidth = 1;
-    for (let i = 0; i < 12; i++) {
-      ctx.beginPath(); ctx.moveTo((i / 12) * w, 0); ctx.lineTo((i / 12) * w, h); ctx.stroke();
-    }
 
-    // معايرة الجسم
-    const nose = lm?.[L.nose];
-    const ls = lm?.[L.lShoulder], rs = lm?.[L.rShoulder];
-    if (nose && ls && rs) {
-      const shoulders = Math.max(0.08, Math.abs(ls.x - rs.x));
-      if (isCalibrating) {
-        const k = 0.15;
-        baseNoseY.current = baseNoseY.current * (1 - k) + nose.y * k;
-        bodyScale.current = bodyScale.current * (1 - k) + shoulders * k;
-      }
+    ctx.save();
+    ctx.strokeStyle = "rgba(150,90,255,0.10)";
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 12; i++) {
+      const t = i / 12;
+      ctx.beginPath();
+      ctx.moveTo(t * w, h);
+      ctx.lineTo(w * 0.5 + (t - 0.5) * w * 0.25, h * 0.38);
+      ctx.stroke();
     }
+    for (let i = 1; i < 9; i++) {
+      const y = h * 0.38 + Math.pow(i / 9, 2.2) * h * 0.62;
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+    ctx.restore();
+    airDust(ctx, w, h, now, "200,150,255");
+
+    const c = cal.current;
+    c.setTolerance(d.tolerance);
+    const st = c.update(lm, dt, isCalibrating, poseOk);
 
     if (isCalibrating) {
-      if (poseOk) {
-        calibTimer.current += dt;
-        if (calibTimer.current > 2) startPlaying();
-      } else calibTimer.current = 0;
+      setCalib({ progress: st.progress, steady: st.steady });
+      if (st.ready) startPlaying();
     }
 
-    const scale = Math.max(0.08, bodyScale.current);
-    const dy = nose ? nose.y - baseNoseY.current : 0;
-    const isJumping = dy < -scale * 0.4;
-    const isDucking = dy > scale * 0.5;
+    const isJumping = st.jumping;
+    const isDucking = st.ducking;
 
     if (isPlaying && now >= spawnAt.current) {
       const lvl = 1 + Math.floor(scoreRef.current / 800);
       setLevel(lvl);
-      spawnAt.current = now + Math.max(900, 1900 - lvl * 130);
+      spawnAt.current = now + Math.max(750, (1900 - lvl * 130) * d.spawn);
       const kind: "high" | "low" = Math.random() < 0.5 ? "high" : "low";
-      lasers.current.push({ y: -0.1, vy: 0.35 + lvl * 0.04, kind, hinted: false, scored: false });
+      lasers.current.push({ y: -0.1, vy: (0.35 + lvl * 0.04) * d.speed, kind, hinted: false, scored: false });
     }
 
     invuln.current = Math.max(0, invuln.current - dt);
@@ -79,7 +92,7 @@ export default function LaserDodge({ onBack }: { onBack: () => void }) {
     lasers.current = lasers.current.filter((lz) => {
       lz.y += lz.vy * dt;
 
-      if (isPlaying && !lz.hinted && lz.y > 0.25) {
+      if (isPlaying && !lz.hinted && lz.y > 0.22) {
         lz.hinted = true;
         audio.speak(lz.kind === "low" ? "اقفز!" : "انخفض!", { cooldown: 800 });
       }
@@ -112,35 +125,44 @@ export default function LaserDodge({ onBack }: { onBack: () => void }) {
         }
       }
 
-      // رسم شعاع الليزر
+      // رسم شعاع الليزر بثلاث طبقات + انعكاس أرضي
       const py = lz.y * h;
       const color = lz.kind === "low" ? "#ff3d7f" : "#3df0ff";
+      const width = Math.max(4, h * 0.012);
+      glow(ctx, w * 0.5, py, w * 0.65, color, 0.22);
+      neonBeam(ctx, 0, py, w, py, width, color);
+
+      // مُصدِرات الليزر على الجانبين
       ctx.save();
-      ctx.shadowBlur = 30;
-      ctx.shadowColor = color;
-      ctx.strokeStyle = color;
-      ctx.lineWidth = h * 0.02;
+      ctx.fillStyle = "#20202c";
+      ctx.strokeStyle = withAlpha(color, 0.8);
+      ctx.lineWidth = 2;
+      for (const ex of [0, w]) {
+        ctx.beginPath();
+        ctx.roundRect(ex - w * 0.035, py - h * 0.022, w * 0.07, h * 0.044, 6);
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      ctx.save();
       ctx.globalAlpha = 0.9;
-      ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(w, py); ctx.stroke();
-      ctx.globalAlpha = 0.25;
-      ctx.lineWidth = h * 0.06;
-      ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(w, py); ctx.stroke();
-      ctx.globalAlpha = 1;
       ctx.font = `${w * 0.07}px serif`;
-      ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(lz.kind === "low" ? "⬆️" : "⬇️", w * 0.5, py - h * 0.045);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(lz.kind === "low" ? "⬆️" : "⬇️", w * 0.5, py - h * 0.05);
       ctx.restore();
 
       return lz.y < 1.2;
     });
 
     sparks.current.forEach((p) => {
-      p.x += p.vx; p.y += p.vy; p.life -= 0.03;
+      p.x += p.vx; p.y += p.vy; p.vy += 0.35; p.life -= 0.028;
       ctx.save();
       ctx.globalAlpha = Math.max(0, p.life);
       ctx.fillStyle = "#ff6a9c";
-      ctx.shadowBlur = 12; ctx.shadowColor = "#ff6a9c";
-      ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 14; ctx.shadowColor = "#ff6a9c";
+      ctx.beginPath(); ctx.arc(p.x, p.y, 4 * p.life + 1, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     });
     sparks.current = sparks.current.filter((p) => p.life > 0);
@@ -148,21 +170,17 @@ export default function LaserDodge({ onBack }: { onBack: () => void }) {
     // مؤشر الحالة
     if (isPlaying) {
       ctx.save();
-      ctx.font = `${w * 0.06}px serif`;
+      ctx.globalAlpha = 0.9;
+      ctx.font = `${w * 0.07}px serif`;
       ctx.textAlign = "center";
       ctx.fillText(isJumping ? "🦘" : isDucking ? "🧎" : "🧍", w * 0.5, h * 0.93);
       ctx.restore();
     }
 
-    // خط الأمان
     const hnd = mirrored(lm?.[L.rWrist]);
-    if (hnd) {
-      ctx.save();
-      ctx.globalAlpha = 0.35;
-      ctx.fillStyle = "#a855f7";
-      ctx.beginPath(); ctx.arc(hnd.x * w, hnd.y * h, w * 0.03, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    }
+    if (hnd) glow(ctx, hnd.x * w, hnd.y * h, w * 0.08, "#a855f7", 0.4);
+
+    vignette(ctx, w, h, 0.5);
 
     flash.current *= 0.88;
     if (flash.current > 0.01) {
@@ -171,15 +189,17 @@ export default function LaserDodge({ onBack }: { onBack: () => void }) {
     }
   }, []);
 
-  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "rgba(180,120,255,0.3)");
+  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "rgba(180,120,255,0.35)");
 
   useEffect(() => () => { audio.stopMusic(); audio.stopSpeech(); }, []);
 
   const play = async () => {
-    calibTimer.current = 0;
+    cal.current.reset();
+    setCalib({ progress: 0, steady: false });
     await start();
     phaseRef.current = "calibrating";
     setPhase("calibrating");
+    audio.speak("قف ثابت حتى نضبط حركاتك", { force: true });
   };
 
   const startPlaying = () => {
@@ -192,8 +212,8 @@ export default function LaserDodge({ onBack }: { onBack: () => void }) {
     spawnAt.current = performance.now() + 900;
     phaseRef.current = "playing";
     setPhase("playing");
-    audio.startKidsMusic(150);
-    audio.speak("اقفز فوق الأحمر وانخفض تحت الأزرق!", { force: true });
+    audio.startKidsMusic(diffRef.current.bpm);
+    audio.speak("اقفز فوق الوردي وانخفض تحت الأزرق!", { force: true });
   };
 
   return (
@@ -201,11 +221,13 @@ export default function LaserDodge({ onBack }: { onBack: () => void }) {
       videoRef={videoRef} canvasRef={canvasRef} title="ممر الليزر" emoji="🔦" onBack={onBack}
       isCalibrating={phase === "calibrating"}
       isPoseVisible={visible}
+      calibProgress={calib.progress}
+      isSteady={calib.steady}
       hud={phase === "playing" ? (
         <>
           <KidHud label="النقاط" value={score.toLocaleString("ar-EG")} />
           <KidHud label="القلوب" value={"❤️".repeat(Math.max(0, lives)) || "💔"} />
-          <KidHud label="المستوى" value={String(level)} />
+          <KidHud label="المستوى" value={`${diff.emoji} ${level}`} />
         </>
       ) : null}
     >
@@ -213,6 +235,7 @@ export default function LaserDodge({ onBack }: { onBack: () => void }) {
         <div className="text-center">
           <h2 className="kid-title text-3xl font-black">ممر الليزر 🔦🥷</h2>
           <p className="mt-2 text-sm text-muted-foreground">اقفز فوق الليزر الوردي وانخفض تحت الليزر الأزرق. ثلاثة قلوب فقط!</p>
+          <DifficultyPicker value={diffId} onChange={select} />
           {error && <p className="mt-2 text-xs text-red-400 font-bold">{error}</p>}
           <button onClick={play} disabled={status === "loading"} className="btn-kid mt-5 w-full shadow-2xl">
             {status === "loading" ? "نشغّل الليزر…" : "ابدأ التسلل! 🔦"}
@@ -223,6 +246,7 @@ export default function LaserDodge({ onBack }: { onBack: () => void }) {
         <div className="text-center">
           <h2 className="kid-title text-4xl">جاسوس ماهر! 🕵️</h2>
           <p className="mt-2 text-2xl font-bold text-fuchsia-400">{score.toLocaleString("ar-EG")} نقطة</p>
+          <DifficultyPicker value={diffId} onChange={select} />
           <button onClick={play} className="btn-kid mt-5 w-full">محاولة جديدة 🔁</button>
         </div>
       )}
