@@ -3,6 +3,10 @@ import GameStage, { KidHud } from "./GameStage";
 import { mirrored, usePoseCamera, type FrameInfo } from "@/lib/usePoseCamera";
 import { L } from "@/lib/dance";
 import { audio } from "@/lib/audioUtils";
+import DifficultyPicker from "./DifficultyPicker";
+import { useDifficulty } from "@/lib/difficulty";
+import { createCalibrator, makeSmoother } from "@/lib/calibration";
+import { glow, vignette } from "@/lib/gfx";
 
 type Star = { x: number; y: number; vy: number; kind: "star" | "bomb"; r: number; rotation: number; trail: {x: number, y: number}[] };
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: string; size: number; glow: boolean };
@@ -10,6 +14,13 @@ type Particle = { x: number; y: number; vx: number; vy: number; life: number; co
 const GAME_MS = 60000;
 
 export default function StarCatcher({ onBack }: { onBack: () => void }) {
+  const { diff, id: diffId, select } = useDifficulty();
+  const diffRef = useRef(diff);
+  diffRef.current = diff;
+  const cal = useRef(createCalibrator({ holdSeconds: 1.4 }));
+  const smoothA = useRef(makeSmoother(0.55));
+  const smoothB = useRef(makeSmoother(0.55));
+  const [calib, setCalib] = useState({ progress: 0, steady: false });
   const [phase, setPhase] = useState<"idle" | "calibrating" | "playing" | "finished">("idle");
   const [score, setScore] = useState(0);
   const [caught, setCaught] = useState(0);
@@ -36,6 +47,8 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
     const isCalibrating = phaseRef.current === "calibrating";
     const isPlaying = phaseRef.current === "playing";
 
+    const d = diffRef.current;
+
     // 1. NEBULA SPACE BACKGROUND
     nebulaPhase.current += 0.005;
     const bgGrad = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, w);
@@ -51,16 +64,12 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
         ctx.beginPath(); ctx.arc(sx, sy, 1, 0, Math.PI*2); ctx.fill();
     }
 
-    // Calibration Logic
+    // Calibration Logic (scale-aware + stability check)
+    cal.current.setTolerance(d.tolerance);
+    const st = cal.current.update(lm, dt, isCalibrating, poseOk);
     if (isCalibrating) {
-      if (poseOk) {
-        calibrationTimer.current += dt;
-        if (calibrationTimer.current > 2.0) {
-          startPlaying();
-        }
-      } else {
-        calibrationTimer.current = 0;
-      }
+      setCalib({ progress: st.progress, steady: st.steady });
+      if (st.ready) startPlaying();
     }
 
     if (isPlaying) {
@@ -69,17 +78,17 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
         phaseRef.current = "finished"; setPhase("finished");
       }
       if (now >= spawnAt.current) {
-        spawnAt.current = now + 600 + Math.random() * 400;
+        spawnAt.current = now + (600 + Math.random() * 400) * d.spawn;
         items.current.push({
           x: 0.1 + Math.random() * 0.8, y: -0.1,
-          vy: 0.2 + Math.random() * 0.15, kind: Math.random() < 0.2 ? "bomb" : "star",
+          vy: (0.2 + Math.random() * 0.15) * d.speed, kind: Math.random() < 0.2 ? "bomb" : "star",
           r: 0.08, rotation: 0, trail: []
         });
       }
     }
     // ...
 
-    const hands = [mirrored(lm?.[L.lWrist]), mirrored(lm?.[L.rWrist])].filter(Boolean) as { x: number; y: number }[];
+    const hands = [smoothA.current(mirrored(lm?.[L.lWrist])), smoothB.current(mirrored(lm?.[L.rWrist]))].filter(Boolean) as { x: number; y: number }[];
     flashOpacity.current *= 0.9;
 
     // 2. LOGIC
@@ -90,7 +99,7 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
       let hit = false;
       if (phaseRef.current === "playing") {
         for (const hnd of hands) {
-          if (Math.hypot(hnd.x - it.x, (hnd.y - it.y) * (h / w)) < it.r) { hit = true; break; }
+          if (Math.hypot(hnd.x - it.x, (hnd.y - it.y) * (h / w)) < it.r * d.tolerance) { hit = true; break; }
         }
       }
       if (hit) {
@@ -169,14 +178,17 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
 
     // Advanced Hand Halos
     hands.forEach(hnd => {
-      ctx.save();
       const hx = hnd.x*w, hy = hnd.y*h;
-      const hPulse = 1 + Math.sin(now * 0.01) * 0.3;
-      const hGrad = ctx.createRadialGradient(hx, hy, 0, hx, hy, 0.15*w);
-      hGrad.addColorStop(0, "rgba(200, 255, 255, 0.6)"); hGrad.addColorStop(1, "transparent");
-      ctx.fillStyle = hGrad; ctx.beginPath(); ctx.arc(hx, hy, 0.12 * w * hPulse, 0, Math.PI*2); ctx.fill();
+      const hPulse = 1 + Math.sin(now * 0.01) * 0.25;
+      glow(ctx, hx, hy, 0.14 * w * hPulse, "#9ff9ff", 0.55);
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,255,255,0.5)";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(hx, hy, 0.055 * w * hPulse, 0, Math.PI*2); ctx.stroke();
       ctx.restore();
     });
+
+    vignette(ctx, w, h, 0.6);
   }, []);
 
   const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "rgba(0, 255, 255, 0.3)");
@@ -185,8 +197,11 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
 
   const play = async () => {
     calibrationTimer.current = 0;
+    cal.current.reset();
+    setCalib({ progress: 0, steady: false });
     await start();
     setPhaseBoth("calibrating");
+    audio.speak("قف ثابت حتى نضبط حركاتك", { force: true });
   };
 
   const startPlaying = () => {
@@ -194,7 +209,7 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
     items.current = []; particles.current = []; flashOpacity.current = 0;
     setScore(0); setCaught(0); setTimeLeft(60);
     spawnAt.current = performance.now(); endAt.current = performance.now() + GAME_MS;
-    phaseRef.current = "playing"; setPhase("playing"); audio.startKidsMusic(140); audio.speak("امسك النجوم!", { force: true });
+    phaseRef.current = "playing"; setPhase("playing"); audio.startKidsMusic(diffRef.current.bpm); audio.speak("امسك النجوم!", { force: true });
   };
 
   const setPhaseBoth = (p: typeof phase) => {
@@ -207,6 +222,8 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
       videoRef={videoRef} canvasRef={canvasRef} title="فضاء النجوم" emoji="⭐" onBack={onBack}
       isCalibrating={phase === "calibrating"}
       isPoseVisible={visible}
+      calibProgress={calib.progress}
+      isSteady={calib.steady}
       hud={phase === "playing" ? (
         <>
           <KidHud label="النقاط" value={score.toLocaleString("ar-EG")} />
@@ -218,6 +235,7 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
         <div className="text-center">
           <h2 className="kid-title text-3xl font-black">فضاء النجوم 🌌🚀</h2>
           <p className="mt-2 text-sm text-muted-foreground">اجمع النجوم الذهبية وتجنب الثقوب السوداء! جاهز للإنطلاق؟</p>
+          <DifficultyPicker value={diffId} onChange={select} />
           <button onClick={play} disabled={status === "loading"} className="btn-kid mt-5 w-full shadow-2xl">
             {status === "loading" ? "تجهيز الصاروخ…" : "إلى الفضاء! 🌠"}
           </button>
@@ -227,6 +245,7 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
         <div className="text-center">
           <h2 className="kid-title text-4xl">رائد فضاء مبدع! 👨‍🚀</h2>
           <p className="mt-2 text-2xl font-bold text-cyan-400">{score.toLocaleString("ar-EG")} نقطة كونية</p>
+          <DifficultyPicker value={diffId} onChange={select} />
           <button onClick={play} className="btn-kid mt-5 w-full">رحلة جديدة 🔁</button>
         </div>
       )}
