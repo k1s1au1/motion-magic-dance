@@ -27,6 +27,9 @@ export type CalibState = {
   /** إزاحة الرأس أفقياً/عمودياً بالنسبة لوضع المعايرة */
   dx: number;
   dy: number;
+  /** موضع الرأس الأساسي المُعاير */
+  baseY: number;
+  baseX: number;
   jumping: boolean;
   ducking: boolean;
   lane: 0 | 1 | 2;
@@ -55,7 +58,7 @@ export function createCalibrator(opts?: { holdSeconds?: number; tolerance?: numb
   let lastY = 0.45;
 
   const state: CalibState = {
-    ready: false, progress: 0, steady: false, scale, dx: 0, dy: 0,
+    ready: false, progress: 0, steady: false, scale, dx: 0, dy: 0, baseY, baseX,
     jumping: false, ducking: false, lane: 1,
   };
 
@@ -131,6 +134,8 @@ export function createCalibrator(opts?: { holdSeconds?: number; tolerance?: numb
       else if (lane === 0) lane = dx > -exit ? 1 : 0;
       else lane = dx < exit ? 1 : 2;
 
+      state.baseY = baseY;
+      state.baseX = baseX;
       state.ready = ready;
       state.progress = Math.min(1, timer / hold);
       state.scale = s;

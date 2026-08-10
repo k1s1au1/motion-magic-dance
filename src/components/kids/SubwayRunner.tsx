@@ -77,6 +77,9 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
     const st = cal.current.update(lm, dt, isCalibrating, poseOk);
 
     if (poseOk) {
+      baselineY.current = st.baseY;
+      baselineX.current = st.baseX;
+      bodyScale.current = st.scale;
       const lane = st.lane;
       playerLane.current = lane;
       if (isPlaying && lane !== lastLane.current) {
