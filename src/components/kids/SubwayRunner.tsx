@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import GameStage, { KidHud } from "./GameStage";
 import { usePoseCamera, type FrameInfo } from "@/lib/usePoseCamera";
 import { audio } from "@/lib/audioUtils";
+import DifficultyPicker from "./DifficultyPicker";
+import { useDifficulty } from "@/lib/difficulty";
+import { createCalibrator } from "@/lib/calibration";
 
 type Lane = 0 | 1 | 2; // Left, Center, Right
 type Obstacle = { id: number; lane: Lane; z: number; type: "barrier-low" | "barrier-high" | "train"; passed?: boolean; hinted?: boolean };
@@ -13,6 +16,11 @@ const MAX_SPEED = 0.45;
 const SPAWN_RATE = 0.03;
 
 export default function SubwayRunner({ onBack }: { onBack: () => void }) {
+  const { diff, id: diffId, select } = useDifficulty();
+  const diffRef = useRef(diff);
+  diffRef.current = diff;
+  const cal = useRef(createCalibrator({ holdSeconds: 1.8 }));
+  const [calib, setCalib] = useState({ progress: 0, steady: false });
   const [phase, setPhase] = useState<"idle" | "calibrating" | "counting" | "playing" | "finished">("idle");
   const [score, setScore] = useState(0);
   const [distance, setDistance] = useState(0);
@@ -62,68 +70,42 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
     const isCounting = phaseRef.current === "counting";
     const isCalibrating = phaseRef.current === "calibrating";
 
-    // 1. Logic: Body Tracking (scale + position calibrated per player)
-    if (lm && poseOk) {
-      const nose = lm[0];
-      const ls = lm[11], rs = lm[12];
-      if (nose && ls && rs) {
-        // body scale = shoulder width, keeps thresholds valid at any distance
-        const shoulders = Math.abs(ls.x - rs.x);
-        const nx = 1 - nose.x;
+    const d = diffRef.current;
 
-        if (isCalibrating || !calibrated.current) {
-          // smooth running average while the player stands still in the middle
-          const k = calibSamples.current < 20 ? 0.35 : 0.08;
-          baselineX.current = baselineX.current * (1 - k) + nx * k;
-          baselineY.current = baselineY.current * (1 - k) + nose.y * k;
-          bodyScale.current = bodyScale.current * (1 - k) + Math.max(0.08, shoulders) * k;
-          calibSamples.current += 1;
-        }
+    // 1. Logic: Body Tracking (معايرة موحّدة حسب مقاس الطفل)
+    cal.current.setTolerance(d.tolerance);
+    const st = cal.current.update(lm, dt, isCalibrating, poseOk);
 
-        const scale = Math.max(0.08, bodyScale.current);
-        const laneGap = scale * 0.85;
-        const dx = nx - baselineX.current;
-        const lane: Lane = dx < -laneGap ? 0 : dx > laneGap ? 2 : 1;
-        playerLane.current = lane;
+    if (poseOk) {
+      const lane = st.lane;
+      playerLane.current = lane;
+      if (isPlaying && lane !== lastLane.current) {
+        lastLane.current = lane;
+        if (lane === 0) audio.speak("يسار");
+        else if (lane === 2) audio.speak("يمين");
+        else audio.speak("النص");
+      }
 
-        if (isPlaying && lane !== lastLane.current) {
-          lastLane.current = lane;
-          if (lane === 0) audio.speak("يسار");
-          else if (lane === 2) audio.speak("يمين");
-          else audio.speak("النص");
-        }
-
-        const dy = nose.y - baselineY.current;
-        if (dy < -scale * 0.45 && playerState.current === "normal") {
-          playerState.current = "jumping";
-          stateTimer.current = now + 650;
-          if (isPlaying) { audio.playJump(); audio.speak("اقفز!"); }
-        } else if (dy > scale * 0.55 && playerState.current === "normal") {
-          playerState.current = "ducking";
-          stateTimer.current = now + 650;
-          if (isPlaying) { audio.playDuck(); audio.speak("انخفض!"); }
-        }
+      if (st.jumping && playerState.current === "normal") {
+        playerState.current = "jumping";
+        stateTimer.current = now + 650;
+        if (isPlaying) { audio.playJump(); audio.speak("اقفز!"); }
+      } else if (st.ducking && playerState.current === "normal") {
+        playerState.current = "ducking";
+        stateTimer.current = now + 650;
+        if (isPlaying) { audio.playDuck(); audio.speak("انخفض!"); }
       }
     }
 
-    // Calibration Logic in Loop: player must stand still and centered
     if (isCalibrating) {
-      const nose = lm?.[0];
-      const steady = poseOk && !!nose && Math.abs(1 - nose.x - baselineX.current) < 0.06 && Math.abs(nose.y - baselineY.current) < 0.06;
-      if (steady && calibSamples.current > 25) {
-        calibrationTimer.current += dt;
-        if (calibrationTimer.current > 2.0) {
-          startCountdown();
-        }
-      } else {
-        calibrationTimer.current = Math.max(0, calibrationTimer.current - dt);
-      }
+      setCalib({ progress: st.progress, steady: st.steady });
+      if (st.ready) startCountdown();
     }
 
     if (now > stateTimer.current) playerState.current = "normal";
 
     if (isPlaying) {
-      currentSpeed.current = Math.min(MAX_SPEED, INITIAL_SPEED + (distance / 6000));
+      currentSpeed.current = Math.min(MAX_SPEED * d.speed, (INITIAL_SPEED + (distance / 6000)) * d.speed);
       const speed = currentSpeed.current;
 
       // Fever Mode logic
@@ -198,12 +180,12 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
       obstacles.current = obstacles.current.filter(o => o.z > -0.2);
       coins.current = coins.current.filter(c => c.z > -0.2);
 
-      if (Math.random() < SPAWN_RATE) {
+      if (Math.random() < SPAWN_RATE / d.spawn) {
         const lane = Math.floor(Math.random() * 3) as Lane;
         const type = Math.random() > 0.8 ? "train" : (Math.random() > 0.4 ? "barrier-high" : "barrier-low");
         obstacles.current.push({ id: nextId.current++, lane, z: 15, type });
       }
-      if (Math.random() < SPAWN_RATE * 1.8) {
+      if (Math.random() < (SPAWN_RATE * 1.8) / d.spawn) {
         coins.current.push({ id: nextId.current++, lane: Math.floor(Math.random() * 3) as Lane, z: 15 });
       }
 
@@ -591,9 +573,8 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
     calibrationTimer.current = 0;
     calibSamples.current = 0;
     lastLane.current = 1;
-    baselineX.current = 0.5;
-    baselineY.current = 0.5;
-    bodyScale.current = 0.18;
+    cal.current.reset();
+    setCalib({ progress: 0, steady: false });
     await start();
     setPhaseBoth("calibrating");
     audio.speak("قف في نص الشاشة وخلّي جسمك كامل يبان", { force: true });
@@ -619,7 +600,7 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
     currentSpeed.current = INITIAL_SPEED;
     phaseRef.current = "playing";
     setPhase("playing");
-    audio.startKidsMusic(138);
+    audio.startKidsMusic(diffRef.current.bpm);
     audio.speak("انطلق!", { force: true });
   };
 
@@ -637,6 +618,8 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
       onBack={onBack}
       isCalibrating={phase === "calibrating"}
       isPoseVisible={visible}
+      calibProgress={calib.progress}
+      isSteady={calib.steady}
       hud={
         phase === "playing" ? (
           <>
@@ -650,6 +633,7 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
         <div className="text-center">
           <h2 className="kid-title text-3xl">مغامرة المترو 🏃</h2>
           <p className="mt-2 text-sm text-muted-foreground">اركض في مكانك، وانقز أو انزل عشان تتفادى الحواجز!</p>
+          <DifficultyPicker value={diffId} onChange={select} />
           <button onClick={play} disabled={status === "loading"} className="btn-kid mt-5 w-full">
             {status === "loading" ? "جاري التجهيز…" : "يلا نركض!"}
           </button>
@@ -662,6 +646,7 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
             <KidHud label="النقاط" value={score.toLocaleString("ar-EG")} />
             <KidHud label="المسافة" value={`${Math.floor(distance)}م`} />
           </div>
+          <DifficultyPicker value={diffId} onChange={select} />
           <button onClick={play} className="btn-kid mt-5 w-full">
             حاول مرة ثانية 🔁
           </button>
