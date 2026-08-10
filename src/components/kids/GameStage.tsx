@@ -11,6 +11,10 @@ type Props = {
   children?: ReactNode;
   isCalibrating?: boolean;
   isPoseVisible?: boolean;
+  /** 0..1 تقدم المعايرة */
+  calibProgress?: number;
+  /** الجسم ثابت داخل الإطار */
+  isSteady?: boolean;
 };
 
 export default function GameStage({
@@ -24,6 +28,8 @@ export default function GameStage({
   children,
   isCalibrating,
   isPoseVisible,
+  calibProgress = 0,
+  isSteady,
 }: Props) {
   return (
     <div className="kid-stage relative mx-auto flex min-h-dvh w-full max-w-md flex-col overflow-hidden bg-[#050510]">
@@ -68,17 +74,24 @@ export default function GameStage({
               </div>
             </div>
 
-            <div className="mt-8 text-center px-10 space-y-4">
-              <div className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-black transition-colors ${isPoseVisible ? 'bg-green-500 text-white' : 'bg-white/20 text-white/60'}`}>
-                {isPoseVisible ? 'تم رصد الجسم! ✨' : 'قف داخل الإطار 👤'}
+            <div className="mt-8 w-full max-w-xs text-center px-6 space-y-4">
+              <div className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-black transition-colors ${isPoseVisible ? (isSteady ? 'bg-emerald-500 text-white' : 'bg-amber-400 text-black') : 'bg-white/20 text-white/60'}`}>
+                {isPoseVisible ? (isSteady ? 'ممتاز! لا تتحرك ✨' : 'ثبّت جسمك قليلاً 🤏') : 'قف داخل الإطار 👤'}
               </div>
 
               <h2 className="text-2xl font-black text-white leading-tight">
-                {isPoseVisible ? 'ثبّت مكانك للمعايرة...' : 'ابتعد عن الكاميرا حتى يظهر جسمك بالكامل'}
+                {isPoseVisible ? 'نقيس طولك ومكانك...' : 'ابتعد عن الكاميرا حتى يظهر جسمك بالكامل'}
               </h2>
 
+              <div className="h-3 w-full overflow-hidden rounded-full bg-white/15">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400 transition-[width] duration-150"
+                  style={{ width: `${Math.round(Math.min(1, Math.max(0, calibProgress)) * 100)}%` }}
+                />
+              </div>
+
               <p className="text-sm text-white/50 font-bold">
-                نضبط المسافة والمكان لضمان دقة اللعب
+                افرد ذراعيك قليلاً وخلّي كتفيك واضحين — كل حركاتك تُضبط على مقاسك أنت
               </p>
             </div>
           </div>

@@ -3,6 +3,10 @@ import GameStage, { KidHud } from "./GameStage";
 import { mirrored, usePoseCamera, type FrameInfo } from "@/lib/usePoseCamera";
 import { L } from "@/lib/dance";
 import { audio } from "@/lib/audioUtils";
+import DifficultyPicker from "./DifficultyPicker";
+import { useDifficulty } from "@/lib/difficulty";
+import { createCalibrator, makeSmoother } from "@/lib/calibration";
+import { glow, vignette } from "@/lib/gfx";
 
 type Balloon = { x: number; y: number; vy: number; drift: number; color: string; r: number; phase: number; wobble: number };
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: string; size: number; rotation: number; dr: number; type: 'confetti' | 'spark' };
@@ -11,6 +15,13 @@ const COLORS = ["#ff3366", "#33ff77", "#3366ff", "#ffff33", "#ff33ff", "#33ffff"
 const GAME_MS = 60000;
 
 export default function BalloonPop({ onBack }: { onBack: () => void }) {
+  const { diff, id: diffId, select } = useDifficulty();
+  const diffRef = useRef(diff);
+  diffRef.current = diff;
+  const cal = useRef(createCalibrator({ holdSeconds: 1.4 }));
+  const smoothA = useRef(makeSmoother(0.55));
+  const smoothB = useRef(makeSmoother(0.55));
+  const [calib, setCalib] = useState({ progress: 0, steady: false });
   const [phase, setPhase] = useState<"idle" | "calibrating" | "playing" | "finished">("idle");
   const [popped, setPopped] = useState(0);
   const [missed, setMissed] = useState(0);
@@ -47,12 +58,19 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
     const isCalibrating = phaseRef.current === "calibrating";
     const isPlaying = phaseRef.current === "playing";
 
+    const d = diffRef.current;
+
     // 1. CLOUDS PARALLAX BACKGROUND
     if (clouds.current.length === 0) {
       for(let i=0; i<10; i++) clouds.current.push({x: Math.random()*w, y: Math.random()*h*0.4, s: 40 + Math.random()*80, v: 0.2 + Math.random()*0.5});
     }
-    ctx.fillStyle = "#87ceeb"; // Sky
+    const sky = ctx.createLinearGradient(0, 0, 0, h);
+    sky.addColorStop(0, "#4fb6f2");
+    sky.addColorStop(0.55, "#8fd6f7");
+    sky.addColorStop(1, "#dff3ff");
+    ctx.fillStyle = sky;
     ctx.fillRect(0,0,w,h);
+    glow(ctx, w * 0.78, h * 0.12, w * 0.6, "#fff6c2", 0.5);
 
     // Draw Clouds
     ctx.fillStyle = "rgba(255,255,255,0.4)";
@@ -61,16 +79,12 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
       ctx.beginPath(); ctx.arc(c.x, c.y, c.s, 0, Math.PI*2); ctx.arc(c.x+c.s*0.6, c.y-c.s*0.2, c.s*0.8, 0, Math.PI*2); ctx.fill();
     });
 
-    // Calibration Logic
+    // Calibration Logic (scale-aware + stability check)
+    cal.current.setTolerance(d.tolerance);
+    const st = cal.current.update(lm, dt, isCalibrating, poseOk);
     if (isCalibrating) {
-      if (poseOk) {
-        calibrationTimer.current += dt;
-        if (calibrationTimer.current > 2.0) {
-          startPlaying();
-        }
-      } else {
-        calibrationTimer.current = 0;
-      }
+      setCalib({ progress: st.progress, steady: st.steady });
+      if (st.ready) startPlaying();
     }
 
     if (isPlaying) {
@@ -79,17 +93,17 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
         phaseRef.current = "finished"; setPhase("finished"); audio.stopMusic();
       }
       if (now >= spawnAt.current) {
-        spawnAt.current = now + 500 + Math.random() * 400;
+        spawnAt.current = now + (500 + Math.random() * 400) * d.spawn;
         items.current.push({
           x: 0.15 + Math.random() * 0.7, y: 1.15,
-          vy: 0.18 + Math.random() * 0.12, drift: (Math.random() - 0.5) * 0.08,
+          vy: (0.18 + Math.random() * 0.12) * d.speed, drift: (Math.random() - 0.5) * 0.08,
           color: COLORS[Math.floor(Math.random() * COLORS.length)] ?? "red",
           r: 0.08, phase: Math.random() * Math.PI * 2, wobble: 0
         });
       }
     }
 
-    const hands = [mirrored(lm?.[L.lWrist]), mirrored(lm?.[L.rWrist])].filter(Boolean) as { x: number; y: number }[];
+    const hands = [smoothA.current(mirrored(lm?.[L.lWrist])), smoothB.current(mirrored(lm?.[L.rWrist]))].filter(Boolean) as { x: number; y: number }[];
 
     // 2. LOGIC & PHYSICS
     items.current = items.current.filter((b) => {
@@ -98,7 +112,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
 
       if (phaseRef.current === "playing") {
         for (const hnd of hands) {
-          if (Math.hypot(hnd.x - b.x, (hnd.y - b.y) * (h / w)) < b.r * 1.1) {
+          if (Math.hypot(hnd.x - b.x, (hnd.y - b.y) * (h / w)) < b.r * 1.1 * d.tolerance) {
             spawnParticles(b.x * w, b.y * h, b.color);
             setPopped((p) => p + 1); audio.playPop(); audio.speak("فرقعة!", { cooldown: 2500 }); return false;
           }
@@ -164,14 +178,16 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
 
     // Hand Halos
     hands.forEach(hnd => {
-      ctx.save();
       const pulse = 1 + Math.sin(now * 0.01) * 0.2;
-      const hGrad = ctx.createRadialGradient(hnd.x*w, hnd.y*h, 0, hnd.x*w, hnd.y*h, 0.1*w);
-      hGrad.addColorStop(0, "rgba(255, 255, 255, 0.5)"); hGrad.addColorStop(1, "transparent");
-      ctx.fillStyle = hGrad;
-      ctx.beginPath(); ctx.arc(hnd.x*w, hnd.y*h, 0.08 * w * pulse, 0, Math.PI*2); ctx.fill();
+      glow(ctx, hnd.x*w, hnd.y*h, 0.11 * w * pulse, "#ffffff", 0.6);
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,255,255,0.7)";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(hnd.x*w, hnd.y*h, 0.05 * w * pulse, 0, Math.PI*2); ctx.stroke();
       ctx.restore();
     });
+
+    vignette(ctx, w, h, 0.35);
   }, []);
 
   const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "rgba(255, 255, 255, 0.4)");
@@ -180,8 +196,11 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
 
   const play = async () => {
     calibrationTimer.current = 0;
+    cal.current.reset();
+    setCalib({ progress: 0, steady: false });
     await start();
     setPhaseBoth("calibrating");
+    audio.speak("قف ثابت حتى نضبط حركاتك", { force: true });
   };
 
   const startPlaying = () => {
@@ -189,7 +208,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
     items.current = []; particles.current = [];
     setPopped(0); setMissed(0); setTimeLeft(60);
     spawnAt.current = performance.now(); endAt.current = performance.now() + GAME_MS;
-    phaseRef.current = "playing"; setPhase("playing"); audio.startKidsMusic(140); audio.speak("فرقع كل البالونات!", { force: true });
+    phaseRef.current = "playing"; setPhase("playing"); audio.startKidsMusic(diffRef.current.bpm); audio.speak("فرقع كل البالونات!", { force: true });
   };
 
   const setPhaseBoth = (p: typeof phase) => {
@@ -202,6 +221,8 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
       videoRef={videoRef} canvasRef={canvasRef} title="كرنفال البالونات" emoji="🎈" onBack={onBack}
       isCalibrating={phase === "calibrating"}
       isPoseVisible={visible}
+      calibProgress={calib.progress}
+      isSteady={calib.steady}
       hud={phase === "playing" ? (
         <>
           <KidHud label="فُرقِعت" value={`${popped}`} />
@@ -213,6 +234,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
         <div className="text-center">
           <h2 className="kid-title text-3xl font-black">كرنفال البالونات 🎡🎈</h2>
           <p className="mt-2 text-sm text-muted-foreground">استعد لأكبر مهرجان فرقعة في التاريخ! الكاميرا جاهزة؟</p>
+          <DifficultyPicker value={diffId} onChange={select} />
           <button onClick={play} disabled={status === "loading"} className="btn-kid mt-5 w-full shadow-xl">
             {status === "loading" ? "نفخ البالونات…" : "ابدأ الكرنفال! 🎉"}
           </button>
@@ -222,6 +244,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
         <div className="text-center">
           <h2 className="kid-title text-4xl">بطل الكرنفال! 🏆</h2>
           <p className="mt-2 text-2xl font-bold text-pink-500">{popped} بالون مفجر</p>
+          <DifficultyPicker value={diffId} onChange={select} />
           <button onClick={play} className="btn-kid mt-5 w-full">العب مرة أخرى 🔁</button>
         </div>
       )}
