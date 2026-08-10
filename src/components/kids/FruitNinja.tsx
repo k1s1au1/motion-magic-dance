@@ -3,6 +3,10 @@ import GameStage, { KidHud } from "./GameStage";
 import { mirrored, usePoseCamera, type FrameInfo } from "@/lib/usePoseCamera";
 import { L } from "@/lib/dance";
 import { audio } from "@/lib/audioUtils";
+import DifficultyPicker from "./DifficultyPicker";
+import { useDifficulty } from "@/lib/difficulty";
+import { createCalibrator, makeSmoother } from "@/lib/calibration";
+import { airDust, drawSphere, glow, vignette } from "@/lib/gfx";
 
 type Fruit = {
   x: number; y: number; vx: number; vy: number; r: number;
@@ -21,6 +25,13 @@ const FRUITS = [
 const GAME_MS = 60000;
 
 export default function FruitNinja({ onBack }: { onBack: () => void }) {
+  const { diff, id: diffId, select } = useDifficulty();
+  const diffRef = useRef(diff);
+  diffRef.current = diff;
+  const cal = useRef(createCalibrator({ holdSeconds: 1.4 }));
+  const smoothA = useRef(makeSmoother(0.55));
+  const smoothB = useRef(makeSmoother(0.55));
+  const [calib, setCalib] = useState({ progress: 0, steady: false });
   const [phase, setPhase] = useState<"idle" | "calibrating" | "playing" | "finished">("idle");
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
@@ -49,26 +60,33 @@ export default function FruitNinja({ onBack }: { onBack: () => void }) {
     const isCalibrating = phaseRef.current === "calibrating";
     const isPlaying = phaseRef.current === "playing";
 
-    // خلفية مطبخ خشبي
+    const d = diffRef.current;
+
+    // خلفية مطبخ خشبي بإضاءة علوية
     const bg = ctx.createLinearGradient(0, 0, 0, h);
-    bg.addColorStop(0, "#2b1b12");
-    bg.addColorStop(1, "#120a06");
+    bg.addColorStop(0, "#3a2517");
+    bg.addColorStop(0.5, "#24150d");
+    bg.addColorStop(1, "#0e0704");
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = "rgba(255,255,255,0.03)";
-    ctx.lineWidth = 2;
+    glow(ctx, w * 0.5, -h * 0.1, w * 1.1, "#ffcf8a", 0.22);
+    ctx.save();
     for (let i = 0; i < 14; i++) {
-      ctx.beginPath();
-      ctx.moveTo(0, (i / 14) * h);
-      ctx.lineTo(w, (i / 14) * h);
-      ctx.stroke();
+      const y = (i / 14) * h;
+      ctx.fillStyle = i % 2 ? "rgba(255,220,180,0.028)" : "rgba(0,0,0,0.05)";
+      ctx.fillRect(0, y, w, h / 14);
+      ctx.strokeStyle = "rgba(0,0,0,0.18)";
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
     }
+    ctx.restore();
+    airDust(ctx, w, h, now, "255,220,170");
 
+    cal.current.setTolerance(d.tolerance);
+    const st = cal.current.update(lm, dt, isCalibrating, poseOk);
     if (isCalibrating) {
-      if (poseOk) {
-        calibTimer.current += dt;
-        if (calibTimer.current > 2) startPlaying();
-      } else calibTimer.current = 0;
+      setCalib({ progress: st.progress, steady: st.steady });
+      if (st.ready) startPlaying();
     }
 
     if (isPlaying) {
@@ -80,15 +98,15 @@ export default function FruitNinja({ onBack }: { onBack: () => void }) {
         audio.speak("انتهى الوقت! أحسنت", { force: true });
       }
       if (now >= spawnAt.current) {
-        spawnAt.current = now + 650 + Math.random() * 500;
+        spawnAt.current = now + (650 + Math.random() * 500) * d.spawn;
         const count = 1 + (Math.random() < 0.3 ? 1 : 0);
         for (let i = 0; i < count; i++) {
           const fromLeft = Math.random() < 0.5;
           fruits.current.push({
             x: fromLeft ? 0.1 + Math.random() * 0.2 : 0.7 + Math.random() * 0.2,
             y: 1.15,
-            vx: (fromLeft ? 1 : -1) * (0.05 + Math.random() * 0.12),
-            vy: -(0.85 + Math.random() * 0.22),
+            vx: (fromLeft ? 1 : -1) * (0.05 + Math.random() * 0.12) * d.speed,
+            vy: -(0.85 + Math.random() * 0.22) * d.speed,
             r: 0.075,
             rot: 0,
             spin: (Math.random() - 0.5) * 6,
@@ -101,7 +119,7 @@ export default function FruitNinja({ onBack }: { onBack: () => void }) {
     }
 
     // مسار اليدين (السيوف)
-    const hands = [mirrored(lm?.[L.rWrist]), mirrored(lm?.[L.lWrist])];
+    const hands = [smoothA.current(mirrored(lm?.[L.rWrist])), smoothB.current(mirrored(lm?.[L.lWrist]))];
     hands.forEach((hnd, i) => {
       const t = trails.current[i]!;
       if (hnd) t.push({ x: hnd.x, y: hnd.y, life: 1 });
@@ -112,7 +130,7 @@ export default function FruitNinja({ onBack }: { onBack: () => void }) {
 
     // فيزياء وتقطيع
     fruits.current = fruits.current.filter((f) => {
-      f.vy += 0.95 * dt;
+      f.vy += 0.95 * d.speed * d.speed * dt;
       f.x += f.vx * dt;
       f.y += f.vy * dt;
       f.rot += f.spin * dt;
@@ -120,7 +138,7 @@ export default function FruitNinja({ onBack }: { onBack: () => void }) {
       if (isPlaying && !f.sliced) {
         for (const hnd of hands) {
           if (!hnd) continue;
-          if (Math.hypot(hnd.x - f.x, (hnd.y - f.y) * (h / w)) < f.r) {
+          if (Math.hypot(hnd.x - f.x, (hnd.y - f.y) * (h / w)) < f.r * d.tolerance) {
             f.sliced = true;
             if (f.bomb) {
               comboRef.current = 0;
@@ -152,12 +170,15 @@ export default function FruitNinja({ onBack }: { onBack: () => void }) {
     // رسم الفواكه
     fruits.current.forEach((f) => {
       const px = f.x * w, py = f.y * h, r = f.r * w;
+      if (f.bomb) glow(ctx, px, py, r * 2.2, "#ff2a2a", 0.4);
+      else drawSphere(ctx, px, py, r * 0.92, FRUITS[f.kind]!.color, { glow: FRUITS[f.kind]!.color });
       ctx.save();
       ctx.translate(px, py);
       ctx.rotate(f.rot);
-      ctx.shadowBlur = 25;
+      ctx.globalAlpha = f.bomb ? 1 : 0.95;
+      ctx.shadowBlur = 18;
       ctx.shadowColor = f.bomb ? "#ff2222" : FRUITS[f.kind]!.color;
-      ctx.font = `${r * 2.1}px serif`;
+      ctx.font = `${r * 1.85}px serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(f.bomb ? "💣" : FRUITS[f.kind]!.emoji, 0, 0);
@@ -202,6 +223,8 @@ export default function FruitNinja({ onBack }: { onBack: () => void }) {
       ctx.restore();
     });
 
+    vignette(ctx, w, h, 0.5);
+
     flash.current *= 0.88;
     if (flash.current > 0.01) {
       ctx.fillStyle = `rgba(255,255,255,${flash.current})`;
@@ -215,9 +238,12 @@ export default function FruitNinja({ onBack }: { onBack: () => void }) {
 
   const play = async () => {
     calibTimer.current = 0;
+    cal.current.reset();
+    setCalib({ progress: 0, steady: false });
     await start();
     phaseRef.current = "calibrating";
     setPhase("calibrating");
+    audio.speak("قف ثابت حتى نضبط حركاتك", { force: true });
   };
 
   const startPlaying = () => {
@@ -232,7 +258,7 @@ export default function FruitNinja({ onBack }: { onBack: () => void }) {
     endAt.current = performance.now() + GAME_MS;
     phaseRef.current = "playing";
     setPhase("playing");
-    audio.startKidsMusic(146);
+    audio.startKidsMusic(diffRef.current.bpm);
     audio.speak("قطّع الفواكه بيديك!", { force: true });
   };
 
@@ -241,6 +267,8 @@ export default function FruitNinja({ onBack }: { onBack: () => void }) {
       videoRef={videoRef} canvasRef={canvasRef} title="نينجا الفواكه" emoji="🍉" onBack={onBack}
       isCalibrating={phase === "calibrating"}
       isPoseVisible={visible}
+      calibProgress={calib.progress}
+      isSteady={calib.steady}
       hud={phase === "playing" ? (
         <>
           <KidHud label="النقاط" value={score.toLocaleString("ar-EG")} />
@@ -253,6 +281,7 @@ export default function FruitNinja({ onBack }: { onBack: () => void }) {
         <div className="text-center">
           <h2 className="kid-title text-3xl font-black">نينجا الفواكه 🍉🥷</h2>
           <p className="mt-2 text-sm text-muted-foreground">لوّح بيديك لتقطيع الفواكه الطائرة، وابتعد عن القنابل!</p>
+          <DifficultyPicker value={diffId} onChange={select} />
           {error && <p className="mt-2 text-xs text-red-400 font-bold">{error}</p>}
           <button onClick={play} disabled={status === "loading"} className="btn-kid mt-5 w-full shadow-2xl">
             {status === "loading" ? "نجهّز السيوف…" : "ابدأ التقطيع! ⚔️"}
@@ -263,6 +292,7 @@ export default function FruitNinja({ onBack }: { onBack: () => void }) {
         <div className="text-center">
           <h2 className="kid-title text-4xl">نينجا محترف! 🥷</h2>
           <p className="mt-2 text-2xl font-bold text-orange-400">{score.toLocaleString("ar-EG")} نقطة</p>
+          <DifficultyPicker value={diffId} onChange={select} />
           <button onClick={play} className="btn-kid mt-5 w-full">جولة جديدة 🔁</button>
         </div>
       )}
