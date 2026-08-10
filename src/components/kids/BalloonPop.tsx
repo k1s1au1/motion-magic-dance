@@ -198,6 +198,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
     setCalib({ progress: 0, steady: false });
     await start();
     setPhaseBoth("calibrating");
+    audio.speak("قف ثابت حتى نضبط حركاتك", { force: true });
   };
 
   const startPlaying = () => {
@@ -205,7 +206,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
     items.current = []; particles.current = [];
     setPopped(0); setMissed(0); setTimeLeft(60);
     spawnAt.current = performance.now(); endAt.current = performance.now() + GAME_MS;
-    phaseRef.current = "playing"; setPhase("playing"); audio.startKidsMusic(140); audio.speak("فرقع كل البالونات!", { force: true });
+    phaseRef.current = "playing"; setPhase("playing"); audio.startKidsMusic(diffRef.current.bpm); audio.speak("فرقع كل البالونات!", { force: true });
   };
 
   const setPhaseBoth = (p: typeof phase) => {
@@ -231,6 +232,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
         <div className="text-center">
           <h2 className="kid-title text-3xl font-black">كرنفال البالونات 🎡🎈</h2>
           <p className="mt-2 text-sm text-muted-foreground">استعد لأكبر مهرجان فرقعة في التاريخ! الكاميرا جاهزة؟</p>
+          <DifficultyPicker value={diffId} onChange={select} />
           <button onClick={play} disabled={status === "loading"} className="btn-kid mt-5 w-full shadow-xl">
             {status === "loading" ? "نفخ البالونات…" : "ابدأ الكرنفال! 🎉"}
           </button>
@@ -240,6 +242,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
         <div className="text-center">
           <h2 className="kid-title text-4xl">بطل الكرنفال! 🏆</h2>
           <p className="mt-2 text-2xl font-bold text-pink-500">{popped} بالون مفجر</p>
+          <DifficultyPicker value={diffId} onChange={select} />
           <button onClick={play} className="btn-kid mt-5 w-full">العب مرة أخرى 🔁</button>
         </div>
       )}
