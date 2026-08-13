@@ -184,7 +184,7 @@ export default function AnimalPoses({ onBack }: { onBack: () => void }) {
     }
   }, []);
 
-  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "rgba(255, 255, 255, 0.4)");
+  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), { avatar: "hero" });
 
   useEffect(() => { return () => { audio.stopMusic(); audio.stopSpeech(); }; }, []);
 

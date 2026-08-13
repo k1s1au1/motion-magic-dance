@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
-import { POSE_CONNECTIONS, poseVisible, type Landmarks } from "@/lib/dance";
+import { poseVisible, type Landmarks, type Pt } from "@/lib/dance";
+import { AVATAR_STYLES, drawAvatar, makeEnergyMeter, type AvatarStyle } from "@/lib/avatar";
 
 const WASM_BASE = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 const MODEL_URL =
@@ -17,13 +18,45 @@ export type FrameInfo = {
   now: number;
   /** true when a full body pose is currently detected (live value, safe inside callbacks) */
   visible: boolean;
+  /** 0..1 motion energy (hand speed) for effects */
+  energy: number;
 };
 
+export type PoseOptions = {
+  /** مفتاح شكل الشخصية داخل اللعبة */
+  avatar?: keyof typeof AVATAR_STYLES;
+  /** ارسم الشخصية تلقائياً فوق مشهد اللعبة */
+  drawCharacter?: boolean;
+};
+
+/** مرشّح تنعيم لكل مفصل: يقلل الاهتزاز مع إبقاء الاستجابة سريعة */
+function smoothLandmarks(prev: Landmarks | null, next: Landmarks, alpha: number): Landmarks {
+  if (!prev) return next.map((p) => ({ ...p }));
+  return next.map((p, i) => {
+    const q = prev[i] as Pt | undefined;
+    if (!q) return { ...p };
+    // تنعيم تكيّفي: الحركة السريعة تمر بأقل تأخير
+    const speed = Math.hypot(p.x - q.x, p.y - q.y);
+    const a = Math.min(1, alpha + speed * 6);
+    const out: Pt = { x: q.x + (p.x - q.x) * a, y: q.y + (p.y - q.y) * a };
+    if (p.visibility !== undefined) out.visibility = p.visibility;
+    return out;
+  });
+}
+
 /**
- * Shared camera + body tracking loop for the kids games.
- * Draws a friendly skeleton then hands the frame to the game via onFrame.
+ * Motion tracking sensor مشترك لكل الألعاب.
+ * الكاميرا تُقرأ فقط لاستخراج المفاصل — لا تُعرض داخل شاشة اللعب،
+ * وبدلاً منها تُرسم شخصية اللعبة (Avatar) التي تقلّد حركة اللاعب.
  */
-export function usePoseCamera(onFrame: (f: FrameInfo) => void, skeletonColor = "hsl(190 100% 65%)") {
+export function usePoseCamera(
+  onFrame: (f: FrameInfo) => void,
+  options?: PoseOptions | string,
+) {
+  const opts: PoseOptions = typeof options === "string" || !options ? {} : options;
+  const style: AvatarStyle = AVATAR_STYLES[opts.avatar ?? "hero"] ?? AVATAR_STYLES["hero"]!;
+  const drawCharacter = opts.drawCharacter !== false;
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const landmarkerRef = useRef<PoseLandmarker | null>(null);
@@ -34,6 +67,9 @@ export function usePoseCamera(onFrame: (f: FrameInfo) => void, skeletonColor = "
   const lastTs = useRef(0);
   const frameRef = useRef(onFrame);
   frameRef.current = onFrame;
+  const energyRef = useRef(makeEnergyMeter());
+  const styleRef = useRef(style);
+  styleRef.current = style;
 
   const [status, setStatus] = useState<PoseStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +94,7 @@ export function usePoseCamera(onFrame: (f: FrameInfo) => void, skeletonColor = "
       const res = landmarker.detectForVideo(video, performance.now());
       const lm = res.landmarks?.[0] as Landmarks | undefined;
       if (poseVisible(lm)) {
-        lastLm.current = lm;
+        lastLm.current = smoothLandmarks(lastLm.current, lm, 0.35);
         visibleRef.current = true;
         setVisible(true);
       } else {
@@ -77,38 +113,15 @@ export function usePoseCamera(onFrame: (f: FrameInfo) => void, skeletonColor = "
     ctx.clearRect(0, 0, w, h);
 
     const lm = lastLm.current;
-    if (lm) {
-      // mirror the skeleton so it lines up with the mirrored video
-      ctx.save();
-      ctx.translate(w, 0);
-      ctx.scale(-1, 1);
-      ctx.shadowColor = skeletonColor;
-      ctx.shadowBlur = 16;
-      ctx.strokeStyle = skeletonColor;
-      ctx.lineWidth = Math.max(4, w * 0.012);
-      ctx.lineCap = "round";
-      for (const [a, b] of POSE_CONNECTIONS) {
-        const pa = lm[a];
-        const pb = lm[b];
-        if (!pa || !pb) continue;
-        ctx.beginPath();
-        ctx.moveTo(pa.x * w, pa.y * h);
-        ctx.lineTo(pb.x * w, pb.y * h);
-        ctx.stroke();
-      }
-      ctx.fillStyle = skeletonColor;
-      for (const i of [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]) {
-        const pt = lm[i];
-        if (!pt) continue;
-        ctx.beginPath();
-        ctx.arc(pt.x * w, pt.y * h, i === 0 ? w * 0.038 : w * 0.015, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
-    }
+    const energy = energyRef.current(lm, dt);
 
-    frameRef.current({ lm, ctx, w, h, dt, now, visible: visibleRef.current });
-  }, [skeletonColor]);
+    // مشهد اللعبة أولاً، ثم الشخصية فوقه (بلا أي بث كاميرا)
+    frameRef.current({ lm, ctx, w, h, dt, now, visible: visibleRef.current, energy });
+
+    if (drawCharacter && lm) {
+      drawAvatar(ctx, lm, w, h, { style: styleRef.current, energy, shadow: true });
+    }
+  }, [drawCharacter]);
 
   const start = useCallback(async () => {
     setError(null);

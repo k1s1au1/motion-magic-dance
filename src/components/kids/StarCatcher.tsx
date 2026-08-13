@@ -191,7 +191,7 @@ export default function StarCatcher({ onBack }: { onBack: () => void }) {
     vignette(ctx, w, h, 0.6);
   }, []);
 
-  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "rgba(0, 255, 255, 0.3)");
+  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), { avatar: "star" });
 
   useEffect(() => { return () => { audio.stopMusic(); }; }, []);
 

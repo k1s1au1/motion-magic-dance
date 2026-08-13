@@ -1,3 +1,4 @@
+import { AVATAR_STYLES, drawAvatar } from "@/lib/avatar";
 import { useCallback, useEffect, useRef, useState } from "react";
 import GameStage, { KidHud } from "./GameStage";
 import { usePoseCamera, type FrameInfo } from "@/lib/usePoseCamera";
@@ -50,7 +51,7 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
   const lastLane = useRef<Lane>(1);
   const calibSamples = useRef(0);
 
-  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "hsl(280 100% 70%)");
+  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), { avatar: "hero", drawCharacter: false });
 
   const spawnParticles = (x: number, y: number, color: string, count: number) => {
     for (let i = 0; i < count; i++) {
@@ -485,35 +486,29 @@ export default function SubwayRunner({ onBack }: { onBack: () => void }) {
     const pyA = h * 0.9;
 
     if (lm) {
-      const avatarScale = w * 0.6;
-      const avatarY = pyA - (playerState.current === "jumping" ? h * 0.42 : 0);
-      const bodyColor = playerState.current === "jumping" ? "#f59e0b" : playerState.current === "ducking" ? "#38bdf8" : "#e5e7eb";
+      const jump = playerState.current === "jumping" ? h * 0.16 : 0;
+      const duck = playerState.current === "ducking" ? 0.78 : 1;
+      const style =
+        playerState.current === "jumping"
+          ? AVATAR_STYLES["star"]!
+          : playerState.current === "ducking"
+            ? AVATAR_STYLES["keeper"]!
+            : AVATAR_STYLES["hero"]!;
 
-      const drawSkellie = (yOff: number) => {
-        const p_v = (i: number) => ({ x: (0.5 - lm[i]!.x) * avatarScale, y: (lm[i]!.y - baselineY.current) * avatarScale + yOff });
-        const conn: [number, number][] = [[11,12], [11,13], [13,15], [12,14], [14,16], [11,23], [12,24], [23,24], [23,25], [24,26], [25,27], [26,28]];
-        conn.forEach(([a, b]) => {
-          const p1 = p_v(a), p2 = p_v(b);
-          ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
-        });
-        const head = p_v(0);
-        ctx.beginPath(); ctx.arc(head.x, head.y, avatarScale * 0.16, 0, Math.PI * 2); ctx.stroke();
-      };
-
-      // ground shadow
+      // ظل أرضي يتفاعل مع القفز
       ctx.save();
-      ctx.fillStyle = "rgba(0,0,0,0.45)";
+      ctx.fillStyle = `rgba(0,0,0,${0.45 - (jump / h) * 1.2})`;
       ctx.beginPath();
-      ctx.ellipse(pxA, pyA + h * 0.02, avatarScale * 0.22, avatarScale * 0.05, 0, 0, Math.PI * 2);
+      ctx.ellipse(pxA, pyA + h * 0.01, w * 0.11, h * 0.016, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
 
-      ctx.save();
-      ctx.translate(pxA, avatarY);
-      ctx.lineCap = "round"; ctx.lineJoin = "round";
-      ctx.strokeStyle = "rgba(0,0,0,0.6)"; ctx.lineWidth = 30; drawSkellie(0);
-      ctx.strokeStyle = bodyColor; ctx.lineWidth = 20; drawSkellie(0);
-      ctx.restore();
+      drawAvatar(ctx, lm, w, h, {
+        style,
+        energy: playerState.current === "normal" ? 0.15 : 0.7,
+        shadow: false,
+        fit: { cx: pxA, bottom: pyA - jump, height: h * 0.42 * duck },
+      });
     }
 
     // Particles

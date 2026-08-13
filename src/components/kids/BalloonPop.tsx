@@ -190,7 +190,7 @@ export default function BalloonPop({ onBack }: { onBack: () => void }) {
     vignette(ctx, w, h, 0.35);
   }, []);
 
-  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "rgba(255, 255, 255, 0.4)");
+  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), { avatar: "hero" });
 
   useEffect(() => { return () => { audio.stopMusic(); }; }, []);
 

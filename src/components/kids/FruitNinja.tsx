@@ -232,7 +232,7 @@ export default function FruitNinja({ onBack }: { onBack: () => void }) {
     }
   }, []);
 
-  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "rgba(255,200,120,0.3)");
+  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), { avatar: "ninja" });
 
   useEffect(() => () => { audio.stopMusic(); audio.stopSpeech(); }, []);
 
