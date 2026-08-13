@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
 import { audio } from "@/lib/audioUtils";
-import { POSE_CONNECTIONS, makeRoutine, poseVisible, rating, type Landmarks, type Move } from "@/lib/dance";
+import { makeRoutine, poseVisible, rating, type Landmarks, type Move } from "@/lib/dance";
+import { AVATAR_STYLES, drawAvatar } from "@/lib/avatar";
+import { airDust, vignette } from "@/lib/gfx";
 
 const WASM_BASE = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 const MODEL_URL =
@@ -50,6 +52,37 @@ export default function DanceGame() {
     if (!ctx) return;
     ctx.clearRect(0, 0, w, h);
 
+    // 0. مسرح رقص بدل بث الكاميرا
+    const t = performance.now();
+    const bg = ctx.createLinearGradient(0, 0, 0, h);
+    bg.addColorStop(0, "#140a2e");
+    bg.addColorStop(0.55, "#1d0b3d");
+    bg.addColorStop(1, "#06030f");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, w, h);
+    ctx.save();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + t * 0.0004;
+      const g = ctx.createLinearGradient(w / 2, 0, w / 2 + Math.cos(a) * w, h);
+      g.addColorStop(0, `hsla(${(i * 60 + t * 0.05) % 360}, 90%, 60%, 0.16)`);
+      g.addColorStop(1, "transparent");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(w / 2, -h * 0.1);
+      ctx.lineTo(w / 2 + Math.cos(a) * w * 0.9, h);
+      ctx.lineTo(w / 2 + Math.cos(a) * w * 0.9 + w * 0.22, h);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+    // أرضية المسرح
+    const floor = ctx.createLinearGradient(0, h * 0.72, 0, h);
+    floor.addColorStop(0, "rgba(255,255,255,0.06)");
+    floor.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = floor;
+    ctx.fillRect(0, h * 0.72, w, h * 0.28);
+    airDust(ctx, w, h, t);
+
     // 1. Draw Ghost / Silhouette hint
     if (phaseRef.current === "playing" && targetId) {
       ctx.save();
@@ -89,41 +122,11 @@ export default function DanceGame() {
 
     if (!lm) return;
 
-    // 2. Draw Player Skeleton with dynamic feedback
-    const hue = 140 + quality * 60;
-    const color = quality > 0.65 ? `oklch(0.75 0.2 150)` : quality > 0.35 ? "oklch(0.85 0.2 90)" : "oklch(0.7 0.2 350)";
-
-    ctx.save();
-    ctx.translate(w, 0);
-    ctx.scale(-1, 1);
-
-    // Glow effect
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 15 + quality * 20;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = Math.max(6, w * 0.015);
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    for (const [a, b] of POSE_CONNECTIONS) {
-      const pa = lm[a], pb = lm[b];
-      if (!pa || !pb) continue;
-      ctx.beginPath();
-      ctx.moveTo(pa.x * w, pa.y * h);
-      ctx.lineTo(pb.x * w, pb.y * h);
-      ctx.stroke();
-    }
-
-    // Draw joints
-    ctx.fillStyle = color;
-    for (const i of [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]) {
-      const pt = lm[i];
-      if (!pt) continue;
-      ctx.beginPath();
-      ctx.arc(pt.x * w, pt.y * h, i === 0 ? w * 0.04 : w * 0.018, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
+    // 2. شخصية اللاعب داخل اللعبة (تقلّد حركته دون إظهار صورته)
+    const style =
+      quality > 0.65 ? AVATAR_STYLES["ninja"]! : quality > 0.35 ? AVATAR_STYLES["star"]! : AVATAR_STYLES["neon"]!;
+    drawAvatar(ctx, lm, w, h, { style, energy: quality, shadow: true });
+    vignette(ctx, w, h, 0.5);
   }, []);
 
   const loop = useCallback(() => {
@@ -258,7 +261,7 @@ export default function DanceGame() {
   return (
     <div className="stage relative mx-auto flex min-h-dvh w-full max-w-md flex-col overflow-hidden">
       <div className="relative flex-1">
-        <video ref={videoRef} playsInline muted className="absolute inset-0 h-full w-full scale-x-[-1] object-cover opacity-70" />
+        <video ref={videoRef} playsInline muted aria-hidden className="pointer-events-none absolute h-px w-px opacity-0" />
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full object-cover" />
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_0%,transparent,var(--color-background))]" />
 

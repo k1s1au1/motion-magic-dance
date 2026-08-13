@@ -272,7 +272,7 @@ export default function FreezeDance({ onBack }: { onBack: () => void }) {
     }
   }, []);
 
-  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "hsl(280 100% 78%)");
+  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), { avatar: "neon" });
 
   useEffect(() => {
     return () => { audio.stopMusic(); };

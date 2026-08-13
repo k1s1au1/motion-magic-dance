@@ -189,7 +189,7 @@ export default function LaserDodge({ onBack }: { onBack: () => void }) {
     }
   }, []);
 
-  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "rgba(180,120,255,0.35)");
+  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), { avatar: "neon" });
 
   useEffect(() => () => { audio.stopMusic(); audio.stopSpeech(); }, []);
 

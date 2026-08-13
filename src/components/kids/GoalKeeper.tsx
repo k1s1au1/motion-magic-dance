@@ -205,7 +205,7 @@ export default function GoalKeeper({ onBack }: { onBack: () => void }) {
     }
   }, []);
 
-  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), "rgba(124,247,255,0.3)");
+  const { videoRef, canvasRef, start, status, error, visible } = usePoseCamera((f) => onFrame(f), { avatar: "keeper" });
 
   useEffect(() => () => { audio.stopMusic(); audio.stopSpeech(); }, []);
 
