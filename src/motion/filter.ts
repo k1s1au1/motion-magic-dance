@@ -34,7 +34,7 @@ export class OneEuro {
         x: p.x + (n.x - p.x) * a,
         y: p.y + (n.y - p.y) * a,
         z: p.z + (n.z - p.z) * a,
-        visibility: n.visibility,
+        visibility: n.visibility ?? 1,
       };
     }
     this.prev = out;
