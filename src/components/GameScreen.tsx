@@ -206,7 +206,6 @@ export function GameScreen({ game }: { game: GameDef }) {
             status={status}
             error={error}
             countdown={countdown}
-            videoRef={videoRef}
           />
           {phase === "calibrate" && (
             <div className="absolute inset-x-0 bottom-6 z-30 flex flex-col items-center gap-2">
@@ -248,9 +247,19 @@ export function GameScreen({ game }: { game: GameDef }) {
         />
       )}
 
-      {phase === "play" && (
-        <video ref={videoRef} playsInline muted className="pointer-events-none absolute h-px w-px opacity-0" />
-      )}
+      {/* عنصر الكاميرا الوحيد: مستشعر فقط، ويظهر كمعاينة صغيرة أثناء المعايرة */}
+      <div
+        className={
+          phase === "calibrate"
+            ? "absolute bottom-40 left-1/2 z-30 h-44 w-32 -translate-x-1/2 overflow-hidden rounded-3xl border-2 border-[oklch(1_0_0/0.2)] bg-black/50"
+            : "pointer-events-none absolute h-px w-px overflow-hidden opacity-0"
+        }
+      >
+        <video ref={videoRef} playsInline muted className="h-full w-full scale-x-[-1] object-cover opacity-80" />
+        {phase === "calibrate" && (
+          <div className="pointer-events-none absolute inset-3 rounded-2xl border-2 border-dashed border-[color:var(--neon-cyan)]/70" />
+        )}
+      </div>
     </div>
   );
 }

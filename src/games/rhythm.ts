@@ -76,7 +76,8 @@ export const rhythm: GameDef = {
               n.hit = true;
               const perfect = d < h * 0.04;
               score.hit(110, perfect ? "perfect" : "good");
-              perfect ? audio.perfect() : audio.good();
+              if (perfect) audio.perfect();
+              else audio.good();
               vfx.impact(x, hitY, perfect ? "#ffd166" : "#3ad1ff", perfect ? 1.4 : 1);
               vfx.floatText(x, hitY - 40, perfect ? "PERFECT" : "GOOD", perfect ? "#ffd166" : "#3ad1ff");
               notes.splice(i, 1);

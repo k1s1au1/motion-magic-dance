@@ -1,4 +1,3 @@
-import type { RefObject } from "react";
 import type { CalibrationState } from "@/motion/types";
 import { TRACKED_PARTS } from "@/motion/landmarks";
 
@@ -7,11 +6,10 @@ type Props = {
   status: string;
   error: string | null;
   countdown: number | null;
-  videoRef: RefObject<HTMLVideoElement | null>;
 };
 
 /** شاشة المعايرة: المعاينة الصغيرة الوحيدة للكاميرا في التطبيق */
-export function CalibrationOverlay({ calibration, status, error, countdown, videoRef }: Props) {
+export function CalibrationOverlay({ calibration, status, error, countdown }: Props) {
   const parts = TRACKED_PARTS.map((p) => ({
     label: p.label,
     ok: (calibration as unknown as Record<string, boolean>)[p.key] ?? false,
@@ -29,16 +27,6 @@ export function CalibrationOverlay({ calibration, status, error, countdown, vide
           <p className="max-w-xs text-sm text-muted-foreground">
             ابتعد عن الجهاز حتى يظهر جسمك كامل داخل الإطار، وقف ثابتاً لحظتين.
           </p>
-
-          <div className="relative h-44 w-32 overflow-hidden rounded-3xl border-2 border-[oklch(1_0_0/0.2)] bg-black/50">
-            <video
-              ref={videoRef}
-              playsInline
-              muted
-              className="h-full w-full scale-x-[-1] object-cover opacity-80"
-            />
-            <div className="pointer-events-none absolute inset-3 rounded-2xl border-2 border-dashed border-[color:var(--neon-cyan)]/70" />
-          </div>
 
           <div className="flex flex-wrap justify-center gap-2">
             {parts.map((p) => (
