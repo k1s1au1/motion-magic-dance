@@ -184,7 +184,7 @@ export function GameScreen({ game }: { game: GameDef }) {
   };
 
   return (
-    <div className="stage relative h-[100dvh] w-full overflow-hidden select-none">
+    <div dir="rtl" className="stage relative h-[100dvh] w-full overflow-hidden select-none">
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
 
       {phase !== "calibrate" && phase !== "countdown" && (
