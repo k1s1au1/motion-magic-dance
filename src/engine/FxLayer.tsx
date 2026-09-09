@@ -35,7 +35,8 @@ export function FxLayer({ fx }: { fx: Fx3D }) {
         pm.setMatrixAt(i, dummy.matrix);
       }
       pm.instanceMatrix.needsUpdate = true;
-      if (pm.geometry.attributes.color) (pm.geometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;
+      const ca = pm.geometry.attributes["color"] as THREE.BufferAttribute | undefined;
+      if (ca) ca.needsUpdate = true;
     }
 
     const rm = rRef.current;
