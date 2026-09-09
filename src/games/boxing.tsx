@@ -3,7 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { audio } from "@/engine/audio";
 import { HandCursors, NeonFloor, StageLights } from "@/engine/kit";
-import { toWorldX, toWorldY, type GameDef, type GameSceneProps } from "@/engine/game";
+import type { GameDef, GameSceneProps } from "@/engine/game";
 
 type Pad = { on: boolean; side: 0 | 1; x: number; y: number; z: number; hit: number };
 
