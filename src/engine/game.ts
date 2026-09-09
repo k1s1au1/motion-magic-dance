@@ -1,5 +1,6 @@
+import type { ComponentType } from "react";
 import type { MotionEvent, MotionInput } from "@/motion/types";
-import type { Vfx } from "./vfx";
+import type { Fx3D } from "./fx3d";
 import type { Score } from "./score";
 
 export type Difficulty = "slow" | "normal" | "fast";
@@ -10,25 +11,29 @@ export const DIFFICULTY: Record<Difficulty, { label: string; speed: number; rate
   fast: { label: "سريع", speed: 1.35, rate: 1.4, window: 0.75 },
 };
 
-export type Frame = {
-  ctx: CanvasRenderingContext2D;
-  /** أبعاد منطقية (CSS px) */
-  w: number;
-  h: number;
+/** إطار اللعب ثلاثي الأبعاد: يمرَّر لكل لعبة في كل frame */
+export type Frame3D = {
   dt: number;
-  /** الزمن منذ بداية الجولة بالثواني */
   t: number;
   input: MotionInput;
   events: MotionEvent[];
-  vfx: Vfx;
+  fx: Fx3D;
   score: Score;
   diff: (typeof DIFFICULTY)[Difficulty];
 };
 
-export type GameInstance = {
-  /** تحديث + رسم في خطوة واحدة */
-  step(f: Frame): void;
-};
+/** حدود عالم اللعب بالوحدات العالمية (World units) */
+export const WORLD = { w: 9, h: 6 };
+
+/** تحويل فضاء اللاعب 0..1 إلى إحداثيات العالم (بدون أي انعكاس) */
+export function toWorldX(x: number) {
+  return (x - 0.5) * WORLD.w;
+}
+export function toWorldY(y: number) {
+  return (0.5 - y) * WORLD.h;
+}
+
+export type GameSceneProps = { frame: () => Frame3D };
 
 export type GameDef = {
   id: string;
@@ -39,5 +44,10 @@ export type GameDef = {
   accent: string;
   accent2: string;
   emoji: string;
-  create(): GameInstance;
+  /** لون خلفية المشهد ثلاثي الأبعاد */
+  bg: string;
+  fogNear?: number;
+  fogFar?: number;
+  camera?: [number, number, number];
+  Scene: ComponentType<GameSceneProps>;
 };
