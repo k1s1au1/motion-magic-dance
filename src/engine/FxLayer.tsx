@@ -58,7 +58,8 @@ export function FxLayer({ fx }: { fx: Fx3D }) {
         rm.setMatrixAt(i, dummy.matrix);
       }
       rm.instanceMatrix.needsUpdate = true;
-      if (rm.geometry.attributes.color) (rm.geometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;
+      const ra = rm.geometry.attributes["color"] as THREE.BufferAttribute | undefined;
+      if (ra) ra.needsUpdate = true;
     }
   });
 
