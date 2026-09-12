@@ -142,7 +142,7 @@ export function GameScreen({ game }: { game: GameDef }) {
       }
     }, 800);
     return () => window.clearInterval(id);
-  }, [calibration.ready, phase]);
+  }, [calibration.ready, demo]);
 
   // مزامنة الواجهة مع حالة اللعب
   useEffect(() => {
