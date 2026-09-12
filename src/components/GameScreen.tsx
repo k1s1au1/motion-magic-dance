@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import * as THREE from "three";
 import { useMotion } from "@/motion/useMotion";
-import { Vfx } from "@/engine/vfx";
+import { Fx3D, type FloatText } from "@/engine/fx3d";
+import { FxLayer } from "@/engine/FxLayer";
 import { audio } from "@/engine/audio";
 import { Score, readBest, writeBest } from "@/engine/score";
-import { DIFFICULTY, type Difficulty, type Frame, type GameDef, type GameInstance } from "@/engine/game";
+import { DIFFICULTY, type Difficulty, type Frame3D, type GameDef } from "@/engine/game";
+import { emptyInput } from "@/motion/types";
 import { CalibrationOverlay } from "./CalibrationOverlay";
 import { Hud } from "./Hud";
 import { ResultCard } from "./ResultCard";
@@ -13,181 +17,233 @@ type Phase = "calibrate" | "countdown" | "play" | "done";
 
 const DIFF_KEY = "motion-arcade-difficulty";
 
+/** يحدّث إطار اللعب مرة واحدة قبل تشغيل مشهد اللعبة */
+function Driver({
+  frameRef,
+  getInput,
+  drain,
+  onFinish,
+}: {
+  frameRef: React.MutableRefObject<Frame3D>;
+  getInput: () => Frame3D["input"];
+  drain: () => Frame3D["events"];
+  onFinish: () => void;
+}) {
+  const { camera } = useThree();
+  const base = useRef(new THREE.Vector3());
+  const done = useRef(false);
+
+  useEffect(() => {
+    base.current.copy(camera.position);
+  }, [camera]);
+
+  useFrame((_, delta) => {
+    const dt = Math.min(0.05, delta);
+    const f = frameRef.current;
+    f.dt = dt;
+    f.t += dt;
+    f.input = getInput();
+    f.events = drain();
+    f.score.tick(dt);
+    f.fx.update(dt);
+
+    const s = f.fx.shake;
+    camera.position.set(
+      base.current.x + (Math.random() - 0.5) * s * 0.5,
+      base.current.y + (Math.random() - 0.5) * s * 0.5,
+      base.current.z,
+    );
+
+    if (f.score.finished && !done.current) {
+      done.current = true;
+      onFinish();
+    }
+  });
+
+  return null;
+}
+
 export function GameScreen({ game }: { game: GameDef }) {
   const navigate = useNavigate();
   const { engine, videoRef, status, error, calibration } = useMotion();
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [phase, setPhase] = useState<Phase>("calibrate");
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [runId, setRunId] = useState(0);
   const [hud, setHud] = useState({ points: 0, combo: 0, timeLeft: game.duration, tracked: false });
-  const [result, setResult] = useState<{ points: number; best: number; accuracy: number; bestCombo: number; stars: number } | null>(null);
+  const [overlay, setOverlay] = useState<{ texts: FloatText[]; flash: number; flashColor: string }>({
+    texts: [],
+    flash: 0,
+    flashColor: "255,255,255",
+  });
+  const [result, setResult] = useState<{ points: number; best: number; accuracy: number; bestCombo: number; stars: number } | null>(
+    null,
+  );
   const [difficulty, setDifficulty] = useState<Difficulty>("normal");
 
-  const scoreRef = useRef<Score | null>(null);
-  const instRef = useRef<GameInstance | null>(null);
-  const vfxRef = useRef(new Vfx());
-  const diffRef = useRef(DIFFICULTY.normal);
+  const frameRef = useRef<Frame3D>({
+    dt: 0,
+    t: 0,
+    input: emptyInput(),
+    events: [],
+    fx: new Fx3D(),
+    score: new Score(game.duration),
+    diff: DIFFICULTY.normal,
+  });
 
   useEffect(() => {
     const saved = window.localStorage.getItem(DIFF_KEY) as Difficulty | null;
     if (saved && DIFFICULTY[saved]) {
       setDifficulty(saved);
-      diffRef.current = DIFFICULTY[saved];
+      frameRef.current.diff = DIFFICULTY[saved];
     }
   }, []);
 
   const setDiff = (d: Difficulty) => {
     setDifficulty(d);
-    diffRef.current = DIFFICULTY[d];
+    frameRef.current.diff = DIFFICULTY[d];
     window.localStorage.setItem(DIFF_KEY, d);
   };
 
-  // بدء العد التنازلي بعد نجاح المعايرة
+  const startRun = () => {
+    frameRef.current.score = new Score(game.duration);
+    frameRef.current.fx = new Fx3D();
+    frameRef.current.t = 0;
+    frameRef.current.events = [];
+    setResult(null);
+    setHud({ points: 0, combo: 0, timeLeft: game.duration, tracked: false });
+    setRunId((n) => n + 1);
+    setPhase("play");
+    audio.startMusic(frameRef.current.diff.speed > 1.1 ? 148 : 126);
+  };
+
+  // وضع تجريبي لفحص الجرافيكس بدون معايرة (?demo=1)
+  const demo = typeof window !== "undefined" && window.location.search.includes("demo=1");
+
+  // العد التنازلي بعد المعايرة (يبدأ مرة واحدة فقط ولا يتأثر بإعادة الرسم)
+  const readyRef = useRef(false);
+  readyRef.current = calibration.ready || demo;
+  const startRef = useRef(startRun);
+  startRef.current = startRun;
+
   useEffect(() => {
-    if (phase !== "calibrate" || !calibration.ready) return;
-    setPhase("countdown");
-    audio.unlock();
-    let n = 3;
-    setCountdown(n);
-    audio.count(n);
-    const id = window.setInterval(() => {
-      n--;
+    let watcher = 0;
+    let ticker = 0;
+    let timer = 0;
+    const begin = () => {
+      setPhase("countdown");
+      audio.unlock();
+      let n = 3;
       setCountdown(n);
       audio.count(n);
-      if (n === 0) {
-        window.clearInterval(id);
-        window.setTimeout(() => {
-          scoreRef.current = new Score(game.duration);
-          instRef.current = game.create();
-          vfxRef.current = new Vfx();
-          setCountdown(null);
-          setPhase("play");
-          audio.startMusic(diffRef.current.speed > 1.1 ? 148 : 126);
-        }, 450);
+      ticker = window.setInterval(() => {
+        n--;
+        setCountdown(n);
+        audio.count(n);
+        if (n === 0) {
+          window.clearInterval(ticker);
+          timer = window.setTimeout(() => {
+            setCountdown(null);
+            startRef.current();
+          }, 450);
+        }
+      }, 800);
+    };
+    watcher = window.setInterval(() => {
+      if (readyRef.current) {
+        window.clearInterval(watcher);
+        begin();
       }
-    }, 800);
-    return () => window.clearInterval(id);
-  }, [calibration.ready, phase, game]);
+    }, 150);
+    return () => {
+      window.clearInterval(watcher);
+      window.clearInterval(ticker);
+      window.clearTimeout(timer);
+    };
+  }, []);
 
-  // حلقة اللعب والرسم
+  // مزامنة الواجهة مع حالة اللعب
   useEffect(() => {
     if (phase !== "play") return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    let raf = 0;
-    let last = performance.now();
-    let t = 0;
-    let hudAcc = 0;
-
-    const resize = () => {
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
-      canvas.width = Math.floor(canvas.clientWidth * dpr);
-      canvas.height = Math.floor(canvas.clientHeight * dpr);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-    resize();
-    window.addEventListener("resize", resize);
-
-    const loop = () => {
-      raf = requestAnimationFrame(loop);
-      const now = performance.now();
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      t += dt;
-
-      const score = scoreRef.current;
-      const inst = instRef.current;
-      if (!score || !inst) return;
-
-      const w = canvas.clientWidth;
-      const h = canvas.clientHeight;
-      const vfx = vfxRef.current;
-      score.tick(dt);
-
-      const frame: Frame = {
-        ctx,
-        w,
-        h,
-        dt,
-        t,
-        input: engine.input,
-        events: engine.drainEvents(),
-        vfx,
-        score,
-        diff: diffRef.current,
-      };
-
-      ctx.save();
-      if (vfx.shake > 0.4) {
-        ctx.translate((Math.random() - 0.5) * vfx.shake, (Math.random() - 0.5) * vfx.shake);
-      }
-      inst.step(frame);
-      vfx.update(dt);
-      vfx.draw(ctx);
-      ctx.restore();
-
-      if (vfx.flash > 0.01) {
-        ctx.fillStyle = `rgba(${vfx.flashColor},${vfx.flash})`;
-        ctx.fillRect(0, 0, w, h);
-      }
-
-      hudAcc += dt;
-      if (hudAcc > 0.1) {
-        hudAcc = 0;
-        setHud({ points: score.points, combo: score.combo, timeLeft: score.timeLeft, tracked: engine.input.tracked });
-      }
-
-      if (score.finished) {
-        cancelAnimationFrame(raf);
-        audio.stopMusic();
-        audio.say(score.accuracy > 60 ? "أداء رائع" : "حاول مرة ثانية");
-        const best = writeBest(game.id, score.points);
-        setResult({
-          points: score.points,
-          best,
-          accuracy: score.accuracy,
-          bestCombo: score.bestCombo,
-          stars: score.stars,
-        });
-        setPhase("done");
-      }
-    };
-    raf = requestAnimationFrame(loop);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", resize);
-      audio.stopMusic();
-    };
-  }, [phase, engine, game]);
+    const id = window.setInterval(() => {
+      const f = frameRef.current;
+      setHud({ points: f.score.points, combo: f.score.combo, timeLeft: f.score.timeLeft, tracked: engine.input.tracked });
+      setOverlay({ texts: [...f.fx.texts], flash: f.fx.flash, flashColor: f.fx.flashColor });
+    }, 80);
+    return () => window.clearInterval(id);
+  }, [phase, engine]);
 
   useEffect(() => () => audio.stopMusic(), []);
 
-  const bestKnown = useMemo(() => readBest(game.id), [game.id]);
-
-  const replay = () => {
-    setResult(null);
-    setHud({ points: 0, combo: 0, timeLeft: game.duration, tracked: false });
-    scoreRef.current = new Score(game.duration);
-    instRef.current = game.create();
-    vfxRef.current = new Vfx();
-    setPhase("play");
-    audio.startMusic(diffRef.current.speed > 1.1 ? 148 : 126);
+  const finish = () => {
+    const s = frameRef.current.score;
+    audio.stopMusic();
+    audio.say(s.accuracy > 60 ? "أداء رائع" : "حاول مرة ثانية");
+    const best = writeBest(game.id, s.points);
+    setResult({ points: s.points, best, accuracy: s.accuracy, bestCombo: s.bestCombo, stars: s.stars });
+    setPhase("done");
   };
+
+  const bestKnown = useMemo(() => readBest(game.id), [game.id]);
 
   const exit = () => {
     audio.stopMusic();
     void navigate({ to: "/" });
   };
 
-  return (
-    <div dir="rtl" className="stage relative h-[100dvh] w-full overflow-hidden select-none">
-      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
+  const GameScene = game.Scene;
+  const getFrame = () => frameRef.current;
+  const cam = game.camera ?? [0, 0.6, 8];
 
-      {phase !== "calibrate" && phase !== "countdown" && (
+  return (
+    <div dir="rtl" className="relative h-[100dvh] w-full overflow-hidden select-none" style={{ background: game.bg }}>
+      {(phase === "play" || phase === "done") && (
+        <Canvas
+          key={runId}
+          shadows
+          dpr={[1, 1.6]}
+          camera={{ position: cam, fov: 62 }}
+          gl={{ antialias: true, powerPreference: "high-performance" }}
+        >
+          <color attach="background" args={[game.bg]} />
+          <fog attach="fog" args={[game.bg, game.fogNear ?? 10, game.fogFar ?? 32]} />
+          <Driver
+            frameRef={frameRef}
+            getInput={() => engine.input}
+            drain={() => engine.drainEvents()}
+            onFinish={finish}
+          />
+          <GameScene frame={getFrame} />
+          <FxLayer fx={frameRef.current.fx} />
+        </Canvas>
+      )}
+
+      {/* وميض وتغذية راجعة نصية */}
+      {phase === "play" && (
+        <>
+          <div
+            className="pointer-events-none absolute inset-0 z-20"
+            style={{ background: `rgba(${overlay.flashColor},${overlay.flash})` }}
+          />
+          <div className="pointer-events-none absolute inset-0 z-20">
+            {overlay.texts.map((t) => (
+              <span
+                key={t.id}
+                className="absolute -translate-x-1/2 text-3xl font-black drop-shadow-[0_2px_10px_rgba(0,0,0,0.6)]"
+                style={{
+                  left: `${t.x * 100}%`,
+                  top: `${t.y * 100 - t.life * 8}%`,
+                  color: t.color,
+                  opacity: Math.max(0, 1 - t.life),
+                }}
+              >
+                {t.msg}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+
+      {(phase === "play" || phase === "done") && (
         <Hud
           title={`${game.emoji} ${game.title}`}
           points={hud.points}
@@ -201,12 +257,7 @@ export function GameScreen({ game }: { game: GameDef }) {
 
       {(phase === "calibrate" || phase === "countdown") && (
         <>
-          <CalibrationOverlay
-            calibration={calibration}
-            status={status}
-            error={error}
-            countdown={countdown}
-          />
+          <CalibrationOverlay calibration={calibration} status={status} error={error} countdown={countdown} />
           {phase === "calibrate" && (
             <div className="absolute inset-x-0 bottom-6 z-30 flex flex-col items-center gap-2">
               <span className="text-xs text-muted-foreground">مستوى الصعوبة</span>
@@ -242,12 +293,12 @@ export function GameScreen({ game }: { game: GameDef }) {
           accuracy={result.accuracy}
           bestCombo={result.bestCombo}
           stars={result.stars}
-          onReplay={replay}
+          onReplay={startRun}
           onExit={exit}
         />
       )}
 
-      {/* عنصر الكاميرا الوحيد: مستشعر فقط، ويظهر كمعاينة صغيرة أثناء المعايرة */}
+      {/* الكاميرا مستشعر فقط: معاينة صغيرة أثناء المعايرة، ومخفية تماماً أثناء اللعب */}
       <div
         className={
           phase === "calibrate"
