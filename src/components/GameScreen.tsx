@@ -119,30 +119,47 @@ export function GameScreen({ game }: { game: GameDef }) {
   // وضع تجريبي لفحص الجرافيكس بدون معايرة (?demo=1)
   const demo = typeof window !== "undefined" && window.location.search.includes("demo=1");
 
-  // العد التنازلي بعد المعايرة (يبدأ مرة واحدة فقط)
-  const countdownStarted = useRef(false);
+  // العد التنازلي بعد المعايرة (يبدأ مرة واحدة فقط ولا يتأثر بإعادة الرسم)
+  const readyRef = useRef(false);
+  readyRef.current = calibration.ready || demo;
+  const startRef = useRef(startRun);
+  startRef.current = startRun;
+
   useEffect(() => {
-    if (countdownStarted.current || (!calibration.ready && !demo)) return;
-    countdownStarted.current = true;
-    setPhase("countdown");
-    audio.unlock();
-    let n = 3;
-    setCountdown(n);
-    audio.count(n);
-    const id = window.setInterval(() => {
-      n--;
+    let watcher = 0;
+    let ticker = 0;
+    let timer = 0;
+    const begin = () => {
+      setPhase("countdown");
+      audio.unlock();
+      let n = 3;
       setCountdown(n);
       audio.count(n);
-      if (n === 0) {
-        window.clearInterval(id);
-        window.setTimeout(() => {
-          setCountdown(null);
-          startRun();
-        }, 450);
+      ticker = window.setInterval(() => {
+        n--;
+        setCountdown(n);
+        audio.count(n);
+        if (n === 0) {
+          window.clearInterval(ticker);
+          timer = window.setTimeout(() => {
+            setCountdown(null);
+            startRef.current();
+          }, 450);
+        }
+      }, 800);
+    };
+    watcher = window.setInterval(() => {
+      if (readyRef.current) {
+        window.clearInterval(watcher);
+        begin();
       }
-    }, 800);
-    return () => window.clearInterval(id);
-  }, [calibration.ready, demo]);
+    }, 150);
+    return () => {
+      window.clearInterval(watcher);
+      window.clearInterval(ticker);
+      window.clearTimeout(timer);
+    };
+  }, []);
 
   // مزامنة الواجهة مع حالة اللعب
   useEffect(() => {
