@@ -93,7 +93,7 @@ function GoalieScene({ frame }: GameSceneProps) {
       {Array.from({ length: 10 }).map((_, i) => (
         <mesh key={i} rotation-x={-Math.PI / 2} position={[0, -3.38, -4 - i * 5]}>
           <planeGeometry args={[50, 2.4]} />
-          <meshStandardMaterial color="#11segment" roughness={0.9} opacity={0.25} transparent />
+          <meshStandardMaterial color="#114d28" roughness={0.9} opacity={0.25} transparent />
         </mesh>
       ))}
       {/* إطار المرمى */}
