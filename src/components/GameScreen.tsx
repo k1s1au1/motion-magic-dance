@@ -119,9 +119,11 @@ export function GameScreen({ game }: { game: GameDef }) {
   // وضع تجريبي لفحص الجرافيكس بدون معايرة (?demo=1)
   const demo = typeof window !== "undefined" && window.location.search.includes("demo=1");
 
-  // العد التنازلي بعد المعايرة
+  // العد التنازلي بعد المعايرة (يبدأ مرة واحدة فقط)
+  const countdownStarted = useRef(false);
   useEffect(() => {
-    if (phase !== "calibrate" || (!calibration.ready && !demo)) return;
+    if (countdownStarted.current || (!calibration.ready && !demo)) return;
+    countdownStarted.current = true;
     setPhase("countdown");
     audio.unlock();
     let n = 3;
