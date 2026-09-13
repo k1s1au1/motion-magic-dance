@@ -23,7 +23,7 @@ export type Frame3D = {
 };
 
 /** حدود عالم اللعب بالوحدات العالمية (World units) */
-export const WORLD = { w: 9, h: 6 };
+export const WORLD = { w: 5.4, h: 9 };
 
 /** تحويل فضاء اللاعب 0..1 إلى إحداثيات العالم (بدون أي انعكاس) */
 export function toWorldX(x: number) {
