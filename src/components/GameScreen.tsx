@@ -7,7 +7,7 @@ import { Fx3D, type FloatText } from "@/engine/fx3d";
 import { FxLayer } from "@/engine/FxLayer";
 import { audio } from "@/engine/audio";
 import { Score, readBest, writeBest } from "@/engine/score";
-import { DIFFICULTY, type Difficulty, type Frame3D, type GameDef } from "@/engine/game";
+import { DIFFICULTY, WORLD, type Difficulty, type Frame3D, type GameDef } from "@/engine/game";
 import { emptyInput } from "@/motion/types";
 import { CalibrationOverlay } from "./CalibrationOverlay";
 import { Hud } from "./Hud";
@@ -29,13 +29,21 @@ function Driver({
   drain: () => Frame3D["events"];
   onFinish: () => void;
 }) {
-  const { camera } = useThree();
+  const { camera, size } = useThree();
   const base = useRef(new THREE.Vector3());
   const done = useRef(false);
 
+  // ملاءمة الكاميرا حتى تظهر مساحة اللعب كاملة على أي شاشة
   useEffect(() => {
-    base.current.copy(camera.position);
-  }, [camera]);
+    const cam = camera as THREE.PerspectiveCamera;
+    const half = Math.tan(((cam.fov * Math.PI) / 180) / 2);
+    const aspect = size.width / Math.max(1, size.height);
+    const distH = WORLD.h / 2 / half;
+    const distW = WORLD.w / 2 / (half * aspect);
+    cam.position.z = Math.max(cam.position.z, distH, distW) * 1.02;
+    cam.updateProjectionMatrix();
+    base.current.copy(cam.position);
+  }, [camera, size.width, size.height]);
 
   useFrame((_, delta) => {
     const dt = Math.min(0.05, delta);

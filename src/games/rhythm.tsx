@@ -8,7 +8,7 @@ import { toWorldX, toWorldY, type GameDef, type GameSceneProps } from "@/engine/
 type Note = { on: boolean; lane: 0 | 1 | 2; y: number };
 
 const N = 14;
-const LANE_X = [-2.8, 0, 2.8];
+const LANE_X = [-1.9, 0, 1.9];
 const HIT_Y = -2.4;
 
 function RhythmScene({ frame }: GameSceneProps) {
@@ -86,7 +86,7 @@ function RhythmScene({ frame }: GameSceneProps) {
       <StageLights key2="#a05bff" />
       {LANE_X.map((x, i) => (
         <mesh key={i} position={[x, 0.6, -1.2]} rotation-x={-0.15}>
-          <planeGeometry args={[2.2, 14]} />
+          <planeGeometry args={[1.7, 14]} />
           <meshStandardMaterial
             color="#1b0f38"
             emissive={i === 1 ? "#ffb020" : "#a05bff"}
@@ -97,7 +97,7 @@ function RhythmScene({ frame }: GameSceneProps) {
         </mesh>
       ))}
       <mesh ref={bar} position={[0, HIT_Y, 0.2]}>
-        <boxGeometry args={[10, 0.16, 0.16]} />
+        <boxGeometry args={[6, 0.16, 0.16]} />
         <meshStandardMaterial color="#ffffff" emissive="#3ad1ff" emissiveIntensity={2} toneMapped={false} />
       </mesh>
 
