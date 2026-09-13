@@ -137,6 +137,7 @@ export function GameScreen({ game }: { game: GameDef }) {
       audio.count(n);
       ticker = window.setInterval(() => {
         n--;
+        console.log("[cd] tick", n);
         setCountdown(n);
         audio.count(n);
         if (n === 0) {
