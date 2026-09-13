@@ -137,7 +137,6 @@ export function GameScreen({ game }: { game: GameDef }) {
       audio.count(n);
       ticker = window.setInterval(() => {
         n--;
-        console.log("[cd] tick", n);
         setCountdown(n);
         audio.count(n);
         if (n === 0) {
@@ -200,6 +199,8 @@ export function GameScreen({ game }: { game: GameDef }) {
       {(phase === "play" || phase === "done") && (
         <Canvas
           key={runId}
+          className="absolute inset-0"
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
           shadows
           dpr={[1, 1.6]}
           camera={{ position: cam, fov: 62 }}
