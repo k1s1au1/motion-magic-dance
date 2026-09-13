@@ -126,6 +126,7 @@ export function GameScreen({ game }: { game: GameDef }) {
   startRef.current = startRun;
 
   useEffect(() => {
+    console.log("[mount] GameScreen");
     let watcher = 0;
     let ticker = 0;
     let timer = 0;
