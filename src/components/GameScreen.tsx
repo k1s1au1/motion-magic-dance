@@ -7,7 +7,7 @@ import { Fx3D, type FloatText } from "@/engine/fx3d";
 import { FxLayer } from "@/engine/FxLayer";
 import { audio } from "@/engine/audio";
 import { Score, readBest, writeBest } from "@/engine/score";
-import { DIFFICULTY, type Difficulty, type Frame3D, type GameDef } from "@/engine/game";
+import { DIFFICULTY, WORLD, type Difficulty, type Frame3D, type GameDef } from "@/engine/game";
 import { emptyInput } from "@/motion/types";
 import { CalibrationOverlay } from "./CalibrationOverlay";
 import { Hud } from "./Hud";
@@ -16,6 +16,19 @@ import { ResultCard } from "./ResultCard";
 type Phase = "calibrate" | "countdown" | "play" | "done";
 
 const DIFF_KEY = "motion-arcade-difficulty";
+
+/** ضباب يتبع مسافة الكاميرا حتى لا يختفي المشهد على الشاشات الطويلة */
+function FogFit({ color, depth }: { color: string; depth: number }) {
+  const { scene, camera } = useThree();
+  useEffect(() => {
+    const z = camera.position.z;
+    scene.fog = new THREE.Fog(color, z + 1.5, z + depth);
+    return () => {
+      scene.fog = null;
+    };
+  }, [scene, camera, color, depth]);
+  return null;
+}
 
 /** يحدّث إطار اللعب مرة واحدة قبل تشغيل مشهد اللعبة */
 function Driver({
@@ -29,13 +42,21 @@ function Driver({
   drain: () => Frame3D["events"];
   onFinish: () => void;
 }) {
-  const { camera } = useThree();
+  const { camera, size } = useThree();
   const base = useRef(new THREE.Vector3());
   const done = useRef(false);
 
+  // ملاءمة الكاميرا حتى تظهر مساحة اللعب كاملة على أي شاشة
   useEffect(() => {
-    base.current.copy(camera.position);
-  }, [camera]);
+    const cam = camera as THREE.PerspectiveCamera;
+    const half = Math.tan(((cam.fov * Math.PI) / 180) / 2);
+    const aspect = size.width / Math.max(1, size.height);
+    const distH = WORLD.h / 2 / half;
+    const distW = WORLD.w / 2 / (half * aspect);
+    cam.position.z = Math.max(cam.position.z, distH, distW) * 1.02;
+    cam.updateProjectionMatrix();
+    base.current.copy(cam.position);
+  }, [camera, size.width, size.height]);
 
   useFrame((_, delta) => {
     const dt = Math.min(0.05, delta);
@@ -199,13 +220,15 @@ export function GameScreen({ game }: { game: GameDef }) {
       {(phase === "play" || phase === "done") && (
         <Canvas
           key={runId}
+          className="absolute inset-0"
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
           shadows
           dpr={[1, 1.6]}
           camera={{ position: cam, fov: 62 }}
           gl={{ antialias: true, powerPreference: "high-performance" }}
         >
           <color attach="background" args={[game.bg]} />
-          <fog attach="fog" args={[game.bg, game.fogNear ?? 10, game.fogFar ?? 32]} />
+          <FogFit color={game.bg} depth={(game.fogFar ?? 32) - (game.fogNear ?? 10) + 12} />
           <Driver
             frameRef={frameRef}
             getInput={() => engine.input}

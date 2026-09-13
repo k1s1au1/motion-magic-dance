@@ -36,7 +36,7 @@ function GoalieScene({ frame }: GameSceneProps) {
         b.done = false;
         b.speed = (13 + Math.random() * 4) * diff.speed;
         b.p.set((Math.random() - 0.5) * 4, 1 + Math.random() * 1.5, -26);
-        b.target.set((Math.random() - 0.5) * 6.5, -1.8 + Math.random() * 3.4, 1);
+        b.target.set((Math.random() - 0.5) * 4.6, -1.6 + Math.random() * 3.6, 1);
         b.spin = 0;
       }
     }
@@ -98,16 +98,16 @@ function GoalieScene({ frame }: GameSceneProps) {
       ))}
       {/* إطار المرمى */}
       <group position={[0, -0.4, 1.4]}>
-        <mesh position={[-5.2, 0, 0]}>
+        <mesh position={[-2.6, 0, 0]}>
           <cylinderGeometry args={[0.16, 0.16, 6, 12]} />
           <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={0.4} />
         </mesh>
-        <mesh position={[5.2, 0, 0]}>
+        <mesh position={[2.6, 0, 0]}>
           <cylinderGeometry args={[0.16, 0.16, 6, 12]} />
           <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={0.4} />
         </mesh>
         <mesh position={[0, 3, 0]} rotation-z={Math.PI / 2}>
-          <cylinderGeometry args={[0.16, 0.16, 10.4, 12]} />
+          <cylinderGeometry args={[0.16, 0.16, 5.2, 12]} />
           <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={0.4} />
         </mesh>
       </group>
