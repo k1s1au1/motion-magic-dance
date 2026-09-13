@@ -17,6 +17,19 @@ type Phase = "calibrate" | "countdown" | "play" | "done";
 
 const DIFF_KEY = "motion-arcade-difficulty";
 
+/** ضباب يتبع مسافة الكاميرا حتى لا يختفي المشهد على الشاشات الطويلة */
+function FogFit({ color, depth }: { color: string; depth: number }) {
+  const { scene, camera } = useThree();
+  useEffect(() => {
+    const z = camera.position.z;
+    scene.fog = new THREE.Fog(color, z + 1.5, z + depth);
+    return () => {
+      scene.fog = null;
+    };
+  }, [scene, camera, color, depth]);
+  return null;
+}
+
 /** يحدّث إطار اللعب مرة واحدة قبل تشغيل مشهد اللعبة */
 function Driver({
   frameRef,
@@ -215,7 +228,7 @@ export function GameScreen({ game }: { game: GameDef }) {
           gl={{ antialias: true, powerPreference: "high-performance" }}
         >
           <color attach="background" args={[game.bg]} />
-          <fog attach="fog" args={[game.bg, game.fogNear ?? 10, game.fogFar ?? 32]} />
+          <FogFit color={game.bg} depth={(game.fogFar ?? 32) - (game.fogNear ?? 10) + 12} />
           <Driver
             frameRef={frameRef}
             getInput={() => engine.input}
